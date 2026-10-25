@@ -179,7 +179,7 @@ export default function App() {
     <div className="app">
       <header className="top">
         <div>
-          <h1 className="brand">Preflight</h1>
+          <h1 className="brand">Get Your Ship Together</h1>
           <p className="tag">Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against the rulebook before it leaves.</p>
         </div>
         <div className="today">{today}</div>
@@ -201,7 +201,7 @@ export default function App() {
               ))}
             </div>
             <div className="composer">
-              <textarea ref={inputEl} rows={1} value={input} placeholder="Describe your shipment in your own words" aria-label="Your message"
+              <textarea ref={inputEl} rows={1} value={input} placeholder="Describe your shipment…" aria-label="Your message"
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
               <button className="btn" disabled={busy} onClick={() => send()}>Send</button>

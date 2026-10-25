@@ -1,4 +1,4 @@
-# Preflight
+# Get Your Ship Together
 
 UK to EU shipment booking by chat or spreadsheet upload, with a deterministic pre-flight checker (rules R-01 to R-10) and carrier recommendation. See `PREFLIGHT_CONTEXT.md` for the full brief.
 
