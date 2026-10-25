@@ -1,0 +1,51 @@
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1 class="brand">Preflight</h1>
+      <p class="tag">Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against the rulebook before it leaves.</p>
+    </div>
+    <div class="today" id="today"></div>
+  </header>
+
+  <main class="grid">
+    <section class="card left" aria-label="Start a booking">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="tab-chat" aria-selected="true" aria-controls="pane-chat">Chat to book</button>
+        <button class="tab" role="tab" id="tab-upload" aria-selected="false" aria-controls="pane-upload">Check a file</button>
+      </div>
+      <div class="pane on" id="pane-chat" role="tabpanel" aria-labelledby="tab-chat">
+        <div class="log" id="log" role="log" aria-live="polite"></div>
+        <div class="composer">
+          <textarea id="input" rows="1" placeholder="Describe your shipment in your own words" aria-label="Your message"></textarea>
+          <button class="btn" id="send">Send</button>
+          <div class="aibar" id="aibar"></div>
+        </div>
+      </div>
+      <div class="pane" id="pane-upload" role="tabpanel" aria-labelledby="tab-upload">
+        <div class="upload">
+          <div class="drop" id="drop">
+            <strong>Drop your booking file here</strong>
+            <span class="note">An Excel or OpenDocument file with a Bookings sheet and an Items sheet, in the template format.</span><br>
+            <button class="btn" id="choose">Choose a file</button>
+            <input type="file" id="file" accept=".xlsx,.xls,.xlsm,.ods" class="sr" tabindex="-1" aria-label="Upload booking file">
+          </div>
+          <div class="sep">or</div>
+          <button class="btn ghost" id="sample">Try the built-in sample bookings</button>
+          <p class="note">The sample has 14 bookings. Each one breaks a different rule so you can see how problems are explained. Dates are set relative to today.</p>
+          <div id="uploadMsg" class="note" role="status"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="right" id="results" aria-label="Results"></section>
+  </main>
+
+  <details class="card ref">
+    <summary>Rulebook and rate card used for every check</summary>
+    <div class="inner" id="reference"></div>
+  </details>
+  <p class="foot">Checks run in the browser using fixed rules, so the same booking always gets the same result. Delivery dates are estimates based on calendar days in transit.</p>
+</div>
+
