@@ -1,7 +1,9 @@
 'use client';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { PF, C } from '@/lib/pf';
-import { Detail, SheetCard, UploadResults, plural } from './Results';
+import { Detail, SheetCard, UploadResults, plural, type UploadHandlers } from './Results';
+import { applyChange, resetBooking, correctedRows, type Spec } from '@/lib/fixes';
+import { bookShipment } from '@/lib/bookingClient';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
 const sig = (c: any) => JSON.stringify(Object.assign({}, c.b, { _confirmed: undefined }));
@@ -21,6 +23,9 @@ export default function App() {
   const [drag, setDrag] = useState(false);
   const [input, setInput] = useState('');
 
+  const [bookBusy, setBookBusy] = useState(false);
+  const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
+  const pendingBook = useRef(false);
   const chat = useRef<any>(C.newChat());
   const prev = useRef<{ red: number; amber: number } | null>(null);
   const msgsRef = useRef<Msg[]>([]);
@@ -51,7 +56,7 @@ export default function App() {
   const completeChips = (ev: any) => {
     if (chat.current.b._confirmed) return ['Start a new booking'];
     const out = ['Add a pallet', 'Change priority to Fastest'];
-    if (ev && ev.status !== 'blocked') out.unshift('Confirm booking');
+    if (ev && ev.status !== 'blocked') out.unshift('Book it');
     return out;
   };
 
@@ -70,8 +75,8 @@ export default function App() {
     const ev = PF.evaluate(b);
     if (log.intent === 'confirm') {
       if (ev.status === 'blocked') return { text: 'I can’t confirm yet: ' + plural(ev.counts.red, 'red problem') + ' still need fixing. ' + ev.issues.filter((i: any) => i.sev === 'red').slice(0, 4).map((i: any) => i.title).join('; ') + '.', chips: completeChips(ev) };
-      b._confirmed = true; prev.current = { red: ev.counts.red, amber: ev.counts.amber };
-      return { text: 'Booking confirmed with ' + ev.rec.selected.carrier + '. The “what happens next” steps are on the right.', chips: ['Start a new booking'] };
+      pendingBook.current = true; prev.current = { red: ev.counts.red, amber: ev.counts.amber };
+      return { text: 'Booking it with ' + ev.rec.selected.carrier + '…', chips: null };
     }
     const first = !prev.current;
     const lines = ev.issues.slice(0, 6).map((i: any) => '• ' + (i.rule === 'DATA' ? 'Missing detail' : i.rule) + ': ' + i.title + (i.item ? ' (' + i.item + ')' : ''));
@@ -104,6 +109,10 @@ export default function App() {
     setInput('');
     if (/^\s*(start over|start a new booking|new booking|reset)\b/i.test(text)) { say('user', text); greet(); return; }
     say('user', text);
+    if (chat.current.b._ref) {
+      say('bot', 'This booking is already booked under reference ' + chat.current.b._ref + ' and can’t be changed here. Say “start over” to make a new booking.', ['Start a new booking']);
+      return;
+    }
     setBusy(true);
     const c0 = chat.current, snap = C.cloneChat(c0);
     const askQ = c0.asked ? c0.asked.q : null;
@@ -129,15 +138,57 @@ export default function App() {
     const reply = compose(log, snap);
     say('bot', reply.text, reply.chips);
     bump();
+    if (pendingBook.current) { pendingBook.current = false; void bookChat(); }
   }
 
-  const changeChat = (fn: () => void, msg: string) => {
+  /** Records a booking through the server, which re-checks the rulebook and refuses red bookings. */
+  async function bookOne(b: any, source: 'chat' | 'upload', fileName?: string) {
+    setBookBusy(true); delete b._bookError; bump();
+    const r = await bookShipment(b, source, fileName);
+    if (r.ok) { b._confirmed = true; b._ref = r.reference; b._saved = r.saved; delete b._bookError; }
+    else b._bookError = r.message;
+    setBookBusy(false); thump(); bump();
+    return r;
+  }
+  async function bookChat() {
     const b = chat.current.b;
-    const before = PF.evaluate(b); fn(); b._confirmed = msg === 'Booking confirmed.';
-    const ev = PF.evaluate(b);
-    say('bot', msg + ' Checks re-run: ' + plural(ev.counts.red, 'red problem') + ', ' + plural(ev.counts.amber, 'amber warning') + ' (was ' + before.counts.red + ' and ' + before.counts.amber + ').', completeChips(ev));
+    const r = await bookOne(b, 'chat');
+    say('bot', r.ok ? 'Booked with ' + PF.evaluate(b).rec.selected.carrier + '. Reference ' + r.reference + '. The “what happens next” steps are on the right.' : r.message,
+      r.ok ? ['Start a new booking'] : completeChips(PF.evaluate(b)));
+  }
+  const fixChat = (spec: Spec) => {
+    const b = chat.current.b;
+    const before = PF.evaluate(b); applyChange(b, spec);
+    const ev = PF.evaluate(b), ch = b._changes[b._changes.length - 1];
+    say('bot', 'Updated ' + ch.scope + ', ' + ch.field + ': ' + ch.from + ' → ' + ch.to + '. Checks re-run: ' + plural(ev.counts.red, 'red problem') + ', ' + plural(ev.counts.amber, 'amber warning') + ' (was ' + before.counts.red + ' and ' + before.counts.amber + ').', completeChips(ev));
     prev.current = { red: ev.counts.red, amber: ev.counts.amber };
     thump(); bump();
+  };
+  const resetChat = () => { resetBooking(chat.current.b); say('bot', 'Everything is back to the details you gave me.', completeChips(PF.evaluate(chat.current.b))); thump(); bump(); };
+
+  const uploadHandlers: UploadHandlers = {
+    fix: (b, spec) => { applyChange(b, spec); thump(); bump(); },
+    reset: b => { resetBooking(b); thump(); bump(); },
+    book: b => { void bookOne(b, 'upload', upload?.fileName); },
+    bookAllClear: async () => {
+      const todo = (upload?.bookings || []).filter((b: any) => !b._ref && PF.evaluate(b).status === 'clear');
+      for (let i = 0; i < todo.length; i++) { setBulk({ done: i, total: todo.length }); await bookOne(todo[i], 'upload', upload?.fileName); }
+      setBulk(null);
+    },
+    download: async () => {
+      if (!upload?.bookings) return;
+      const mod: any = await import('xlsx');
+      const X = mod.default ?? mod;
+      const r = correctedRows(upload.bookings);
+      const wb = X.utils.book_new();
+      X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(r.bookingRows), 'Bookings');
+      X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(r.itemRows), 'Items');
+      X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(r.changeRows), 'Change log');
+      X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(r.resultRows), 'Results');
+      X.writeFile(wb, String(upload.fileName || 'bookings').replace(/\.[^.]+$/, '') + '-corrected.xlsx');
+    },
+    busy: bookBusy,
+    bulk,
   };
 
   const showUpload = (u: any) => { setUpload(u); setSelState(null); thump(); setMode('upload'); };
@@ -235,10 +286,10 @@ export default function App() {
                 <div className="card section"><h3>Pre-flight checks</h3><p className="muted">The ten rulebook checks and the carrier recommendation appear here as soon as the details are complete. Nothing is guessed: anything I’m unsure of, I’ll ask.</p></div>
               </>
             ) : (
-              <Detail b={b} aiOn={aiOn} thumpKey={thumpKey} opts={{ change: changeChat }} sheet={<SheetCard b={b} title="Booking sheet" />} />
+              <Detail b={b} aiOn={aiOn} thumpKey={thumpKey} opts={{ fix: fixChat, book: () => { void bookChat(); }, reset: resetChat, booking: bookBusy }} />
             )
           ) : (
-            <UploadResults upload={upload} sel={sel} setSel={setSel} bump={bump} thumpKey={thumpKey} aiOn={aiOn} />
+            <UploadResults upload={upload} sel={sel} setSel={setSel} thumpKey={thumpKey} aiOn={aiOn} h={uploadHandlers} />
           )}
         </section>
       </main>

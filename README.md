@@ -20,6 +20,8 @@ npm test                     # Vitest: rules, parser, real xlsx round-trip
 - `app/api/second-opinion` advisory restricted-goods check (not one of the ten rules).
 - `app/api/uploads` saves each uploaded spreadsheet (original file plus per-booking results) to Neon. Optional; skipped when `DATABASE_URL` is unset. No endpoint returns stored files.
 - `lib/server/db.ts`, `lib/server/uploads.ts`, `db/schema.sql` Neon access, server-side analysis, table definition (created automatically on first save).
+- `lib/fixes.ts` corrections (apply, log, reset, corrected-file rows). They only change data; the unchanged rules engine decides.
+- `app/api/bookings` + `lib/server/booking.ts` records a booking. The server re-runs the rules engine and refuses any booking with a red issue.
 - `components/` React UI. `legacy/` the original prototype scripts, for reference.
 
 ## Gemini

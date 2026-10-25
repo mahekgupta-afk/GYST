@@ -1,9 +1,11 @@
 'use client';
 import { useState, type ReactNode } from 'react';
 import { PF, C } from '@/lib/pf';
+import { hasChanges, type Spec, type Change } from '@/lib/fixes';
+import { QuickFix, EditableSheet } from './FixEditor';
 
 export const plural = (n: number, w: string, p?: string) => n + ' ' + (n === 1 ? w : p || w + 's');
-type Opts = { change: (fn: () => void, msg: string) => void };
+export type Opts = { fix: (s: Spec) => void; book: () => void; reset: () => void; booking: boolean };
 
 /* ---------- shared pieces ---------- */
 function RuleStrip({ ev }: { ev: any }) {
@@ -39,34 +41,24 @@ function Verdict({ b, ev, thumpKey }: { b: any; ev: any; thumpKey: number }) {
 }
 
 function Issues({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
-  const rec = ev.rec;
   return (
     <div className="card section">
       <h3>{ev.issues.length ? 'What’s wrong and how to fix it' : 'Rulebook check'}</h3>
       {!ev.issues.length && (
         <div className="allgood"><span className="pill green">All clear</span><p>All ten rules pass for this booking. Nothing needs fixing.</p></div>
       )}
-      {ev.issues.map((i: any, n: number) => {
-        const acts: ReactNode[] = [];
-        if (i.rule === 'R-05' && rec.selected) {
-          if (rec.recommended && rec.recommended.carrier !== rec.selected.carrier)
-            acts.push(<button key="sw" className="btn small" onClick={() => opts.change(() => { b._carrier = rec.recommended.carrier; }, 'Switched to ' + rec.recommended.carrier + '.')}>{'Switch to ' + rec.recommended.carrier}</button>);
-          if (rec.selected.minPallets && rec.selected.minPallets !== b.pallets)
-            acts.push(<button key="pl" className="btn small ghost" onClick={() => opts.change(() => { b.pallets = rec.selected.minPallets; }, 'Changed to ' + rec.selected.minPallets + ' pallets.')}>{'Use ' + rec.selected.minPallets + ' pallets with ' + rec.selected.carrier}</button>);
-        }
-        return (
-          <article key={n} className={'issue ' + i.sev}>
-            <header>
-              <span className={'pill ' + i.sev}>{i.sev === 'red' ? 'Red: must fix' : 'Amber: should fix'}</span>
-              <span className="pill grey">{i.rule === 'DATA' ? 'Missing data' : i.rule}</span>
-              {i.item ? <span className="pill grey">{i.item}</span> : null}
-              <h4>{i.title}</h4>
-            </header>
-            <dl><dt>What’s wrong</dt><dd>{i.what}</dd><dt>How to fix</dt><dd>{i.fix}</dd></dl>
-            {acts.length ? <div className="acts">{acts}</div> : null}
-          </article>
-        );
-      })}
+      {ev.issues.map((i: any, n: number) => (
+        <article key={i.rule + n + (i.item || '') + i.title} className={'issue ' + i.sev}>
+          <header>
+            <span className={'pill ' + i.sev}>{i.sev === 'red' ? 'Red: must fix' : 'Amber: should fix'}</span>
+            <span className="pill grey">{i.rule === 'DATA' ? 'Missing data' : i.rule}</span>
+            {i.item ? <span className="pill grey">{i.item}</span> : null}
+            <h4>{i.title}</h4>
+          </header>
+          <dl><dt>What’s wrong</dt><dd>{i.what}</dd><dt>How to fix</dt><dd>{i.fix}</dd></dl>
+          <QuickFix issue={i} b={b} ev={ev} fix={opts.fix} />
+        </article>
+      ))}
     </div>
   );
 }
@@ -109,7 +101,7 @@ function CarrierSection({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
                     {o === rec.preferred && !isRec ? <div><span className="pill grey">Your first pick</span></div> : null}</td>
                   <td className="num">{PF.gbp(o.price)}</td><td className="num">{o.cost != null ? PF.gbp(o.cost) : '—'}</td><td className="num">{o.transit}</td><td className="num">{o.ontime + '%'}</td><td className="num">{o.maxKg}</td>
                   <td><span className={'pill ' + (o.eligible ? 'green' : 'red')}>{fit}</span></td>
-                  <td>{isSel ? <span className="pill grey">Selected</span> : <button className="btn small ghost" onClick={() => opts.change(() => { b._carrier = o.carrier; }, 'Switched to ' + o.carrier + '.')}>Use</button>}</td>
+                  <td>{isSel ? <span className="pill grey">Selected</span> : <button className="btn small ghost" onClick={() => opts.fix({ kind: 'carrier', carrier: o.carrier, rule: 'Carrier choice' })}>Use</button>}</td>
                 </tr>
               );
             })}
@@ -123,22 +115,67 @@ function CarrierSection({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
 
 function Confirmation({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
   const s = PF.summarise(b, ev);
+  const booked = !!b._ref;
   return (
     <div className="card section confirm">
-      <h3>Confirmation</h3>
+      <h3>{booked ? 'Booked' : 'Book this shipment'}</h3>
       <p><b>{s.headline + '. '}</b></p>
       {s.lines.map((l: string, i: number) => <p key={i}>{l}</p>)}
       <p className="muted" style={{ marginTop: 10 }}><b>What happens next</b></p>
       <ol>{s.next.map((n: string, i: number) => <li key={i}>{n}</li>)}</ol>
-      {b._confirmed && ev.status !== 'blocked' ? (
-        <div className="confirmed" role="status"><b>{'Booking ' + b.id + ' confirmed with ' + ev.rec.selected.carrier + '. '}</b>This booking is recorded here and has not been sent to a carrier yet.</div>
+      {booked ? (
+        <div className="confirmed" role="status">
+          <b>{'Booked with ' + ev.rec.selected.carrier + '. Reference ' + b._ref + '. '}</b>
+          {b._saved === false ? 'This booking was checked but could not be saved to the booking log. ' : 'The booking is recorded under this reference. '}
+          It has not been transmitted to a carrier.
+        </div>
       ) : (
         <div className="row-actions" style={{ margin: '14px 0 0' }}>
-          <button className="btn" disabled={ev.status === 'blocked'} onClick={() => opts.change(() => { b._confirmed = true; }, 'Booking confirmed.')}>{ev.status === 'blocked' ? 'Fix red items to confirm' : 'Confirm booking'}</button>
-          {ev.status === 'warning' ? <span className="note">You can confirm with warnings, but fixing them avoids delays.</span> : null}
+          <button className="btn" disabled={ev.status === 'blocked' || opts.booking} onClick={opts.book}>{ev.status === 'blocked' ? 'Fix red items to book' : opts.booking ? 'Booking…' : 'Book shipment'}</button>
+          {ev.status === 'warning' ? <span className="note">You can book with warnings, but fixing them avoids delays.</span> : null}
         </div>
       )}
+      {b._bookError ? <div className="bookerr" role="alert">{b._bookError}</div> : null}
     </div>
+  );
+}
+
+function FixProgress({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
+  const start = PF.evaluate(b._orig ? JSON.parse(JSON.stringify(b._orig)) : b);
+  const startN = start.issues.length, nowN = ev.issues.length;
+  const pct = startN === 0 ? 100 : Math.max(0, Math.min(100, Math.round((1 - nowN / startN) * 100)));
+  const booked = !!b._ref;
+  const blocked = ev.status === 'blocked';
+  const text = booked ? 'This booking has been booked.'
+    : blocked ? 'Fix the ' + plural(ev.counts.red, 'red problem') + ' below, then you can book this shipment.'
+    : ev.status === 'warning' ? 'No red problems left. You can book now, or fix the ' + plural(ev.counts.amber, 'warning') + ' first to avoid delays.'
+    : 'All ten rules pass. This shipment is ready to book.';
+  return (
+    <div className="card section fixprog">
+      <h3>{booked ? 'Booked' : blocked ? 'Fix, then book' : 'Ready to book'}</h3>
+      <p style={{ margin: 0 }}>{text}</p>
+      <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Problems resolved"><i style={{ width: pct + '%' }} /></div>
+      <p className="note" style={{ margin: 0 }}>{'Started with ' + plural(start.counts.red, 'red problem') + ' and ' + plural(start.counts.amber, 'amber warning') + '. Now ' + ev.counts.red + ' red and ' + ev.counts.amber + ' amber.'}</p>
+      <div className="row-actions">
+        {!booked ? <button className="btn" disabled={blocked || opts.booking} onClick={opts.book}>{opts.booking ? 'Booking…' : 'Book shipment'}</button> : null}
+        {hasChanges(b) && !booked ? <button className="btn ghost small" onClick={opts.reset}>Reset to original</button> : null}
+      </div>
+    </div>
+  );
+}
+
+function ChangeLog({ b }: { b: any }) {
+  if (!hasChanges(b)) return null;
+  return (
+    <details className="card section changes">
+      <summary>{'Corrections made (' + b._changes.length + ')'}</summary>
+      <div className="scroll">
+        <table>
+          <thead><tr><th>Fixes</th><th>Applies to</th><th>Field</th><th>Was</th><th>Now</th></tr></thead>
+          <tbody>{b._changes.map((c: Change, i: number) => <tr key={i}><td>{c.rule}</td><td>{c.scope}</td><td>{c.field}</td><td>{String(c.from)}</td><td>{String(c.to)}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </details>
   );
 }
 
@@ -198,25 +235,29 @@ function Advisory({ b }: { b: any }) {
   );
 }
 
-export function Detail({ b, opts, sheet, thumpKey, aiOn, banner }: { b: any; opts: Opts; sheet: ReactNode; thumpKey: number; aiOn: boolean; banner?: ReactNode }) {
+export function Detail({ b, opts, thumpKey, aiOn }: { b: any; opts: Opts; thumpKey: number; aiOn: boolean }) {
   const ev = PF.evaluate(b);
+  const locked = !!b._ref; // a booked shipment is final: its fields can't be edited any more
   return (
-    <>
-      {banner}
+    <fieldset className="lock" disabled={locked}>
       <Verdict b={b} ev={ev} thumpKey={thumpKey} />
+      <FixProgress b={b} ev={ev} opts={opts} />
       <Issues b={b} ev={ev} opts={opts} />
       <CarrierSection b={b} ev={ev} opts={opts} />
       <Confirmation b={b} ev={ev} opts={opts} />
-      {sheet}
+      <EditableSheet b={b} ev={ev} fix={opts.fix} title="Booking details" />
+      <ChangeLog b={b} />
       {aiOn ? <Advisory b={b} /> : null}
-    </>
+    </fieldset>
   );
 }
 
 /* ---------- upload results ---------- */
-function StatusPills({ ev }: { ev: any }) {
-  if (!ev.issues.length) return <span className="pill green">All clear</span>;
-  return <span>{ev.counts.red ? <span className="pill red">{ev.counts.red + ' red'}</span> : null} {ev.counts.amber ? <span className="pill amber">{ev.counts.amber + ' amber'}</span> : null}</span>;
+function StatusPills({ b, ev }: { b: any; ev: any }) {
+  if (b._ref) return <span className="pill green">Booked</span>;
+  if (ev.status === 'blocked') return <span><span className="pill red">{'Needs fixing: ' + ev.counts.red + ' red'}</span>{ev.counts.amber ? <> <span className="pill amber">{ev.counts.amber + ' amber'}</span></> : null}</span>;
+  if (ev.status === 'warning') return <span className="pill amber">{'Ready, ' + plural(ev.counts.amber, 'warning')}</span>;
+  return <span className="pill green">Ready to book</span>;
 }
 
 export function exportCSV(bookings: any[]) {
@@ -235,12 +276,22 @@ export function exportCSV(bookings: any[]) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function UploadResults({ upload, sel, setSel, bump, thumpKey, aiOn }: { upload: any; sel: string | null; setSel: (id: string | null) => void; bump: () => void; thumpKey: number; aiOn: boolean }) {
+export type UploadHandlers = {
+  fix: (b: any, s: Spec) => void;
+  book: (b: any) => void;
+  reset: (b: any) => void;
+  bookAllClear: () => void;
+  download: () => void;
+  busy: boolean;
+  bulk: { done: number; total: number } | null;
+};
+
+export function UploadResults({ upload, sel, setSel, thumpKey, aiOn, h }: { upload: any; sel: string | null; setSel: (id: string | null) => void; thumpKey: number; aiOn: boolean; h: UploadHandlers }) {
   if (!upload) {
     return (
       <div className="card empty">
         <h2>Check your bookings</h2>
-        <p>Upload your Bookings and Items sheets. Every booking is checked against the ten rules and gets a carrier recommendation, with a plain explanation for anything that’s wrong.</p>
+        <p>Upload your Bookings and Items sheets. Every booking is checked against the ten rules. Fix what’s flagged right here, then book each shipment once it’s ready.</p>
         <p>Need the format? Download the blank template on the left.</p>
       </div>
     );
@@ -261,44 +312,53 @@ export function UploadResults({ upload, sel, setSel, bump, thumpKey, aiOn }: { u
           </span>
         </div>
         <Detail b={cur.b} aiOn={aiOn} thumpKey={thumpKey}
-          opts={{ change: (fn) => { fn(); cur.b._edited = true; bump(); } }}
-          sheet={<SheetCard b={cur.b} title="Booking details as uploaded" />}
-          banner={cur.b._edited ? <div className="warnbox">You changed this booking here to see the effect. Your file hasn’t changed, so make the same fix there before resubmitting.</div> : null} />
+          opts={{ fix: s => h.fix(cur.b, s), book: () => h.book(cur.b), reset: () => h.reset(cur.b), booking: h.busy }} />
       </>
     );
   }
-  const n = { red: 0, amber: 0, green: 0 };
-  evs.forEach((x: any) => { n[x.ev.status === 'blocked' ? 'red' : x.ev.status === 'warning' ? 'amber' : 'green']++; });
+  const booked = evs.filter((x: any) => x.b._ref).length;
+  const needs = evs.filter((x: any) => !x.b._ref && x.ev.status === 'blocked').length;
+  const ready = evs.length - booked - needs;
+  const clearToBook = evs.filter((x: any) => !x.b._ref && x.ev.status === 'clear').length;
+  const anyChanges = evs.some((x: any) => hasChanges(x.b));
   return (
     <div className="card section">
-      <div className="row-actions"><h3 style={{ margin: 0 }}>{upload.fileName}</h3><button className="btn small ghost" onClick={() => exportCSV(upload.bookings)}>Download results (CSV)</button></div>
+      <div className="row-actions"><h3 style={{ margin: 0 }}>{upload.fileName}</h3></div>
       <div className="tiles">
-        <div className="tile"><b>{evs.length}</b><span>bookings checked</span></div>
-        <div className="tile red"><b>{n.red}</b><span>on hold (red problems)</span></div>
-        <div className="tile amber"><b>{n.amber}</b><span>can ship with warnings</span></div>
-        <div className="tile green"><b>{n.green}</b><span>clear to ship</span></div>
+        <div className="tile"><b>{evs.length}</b><span>bookings in this file</span></div>
+        <div className="tile red"><b>{needs}</b><span>need fixing</span></div>
+        <div className="tile amber"><b>{ready}</b><span>ready to book</span></div>
+        <div className="tile green"><b>{booked}</b><span>booked</span></div>
       </div>
+      <div className="row-actions" style={{ margin: '4px 0 14px' }}>
+        <button className="btn" disabled={!clearToBook || h.busy} onClick={h.bookAllClear}>
+          {h.bulk ? 'Booking ' + (h.bulk.done + 1) + ' of ' + h.bulk.total + '…' : 'Book all clear (' + clearToBook + ')'}
+        </button>
+        <button className="btn small ghost" onClick={h.download}>{anyChanges ? 'Download corrected file (.xlsx)' : 'Download results (.xlsx)'}</button>
+        <button className="btn small ghost" onClick={() => exportCSV(upload.bookings)}>Download issue list (CSV)</button>
+      </div>
+      <p className="note" style={{ marginTop: -6 }}>Bookings with warnings only are booked one at a time, so you can read the warnings first.</p>
       {(upload.warnings || []).map((w: string, i: number) => <div key={i} className="warnbox">{w}</div>)}
       <div className="scroll">
         <table>
-          <thead><tr>{['Booking', 'Seller', 'Route', 'Pallets', 'Recommended carrier', 'Result'].map((t, i) => <th key={t} className={i === 3 ? 'num' : ''}>{t}</th>)}</tr></thead>
+          <thead><tr>{['Booking', 'Seller', 'Route', 'Pallets', 'Recommended carrier', 'Status'].map((t, i) => <th key={t} className={i === 3 ? 'num' : ''}>{t}</th>)}</tr></thead>
           <tbody>
             {evs.map(({ b, ev }: any) => {
               const r = ev.rec, c = r.recommended;
               const go = () => { setSel(b.id); window.scrollTo({ top: 0 }); };
               return (
                 <tr key={b.id} className="click" tabIndex={0} role="link" aria-label={'Open ' + b.id} onClick={go} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }}>
-                  <td><b>{b.id}</b></td><td>{b.seller || '—'}</td><td>{(b.originCity || '?') + ' to ' + (b.destCity || '?')}</td>
+                  <td><b>{b.id}</b>{b._ref ? <div className="note">{b._ref}</div> : null}</td><td>{b.seller || '—'}</td><td>{(b.originCity || '?') + ' to ' + (b.destCity || '?')}</td>
                   <td className="num">{b.pallets != null ? b.pallets : '—'}</td>
                   <td>{c ? c.carrier + ', ' + PF.gbp(c.price * (r.pallets || 0)) : (r.error ? '—' : 'None fits')}</td>
-                  <td><StatusPills ev={ev} /></td>
+                  <td><StatusPills b={b} ev={ev} /></td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      <p className="note" style={{ marginTop: 10 }}>Select a booking to see what’s wrong, how to fix it, the carrier reasoning and the confirmation.</p>
+      <p className="note" style={{ marginTop: 10 }}>Select a booking to see what’s wrong, fix it, and book it.</p>
     </div>
   );
 }

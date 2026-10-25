@@ -166,3 +166,43 @@ details .inner { padding: 16px 20px; }
   .issue dd { margin-bottom: 8px; }
   .section { padding: 16px; }
 }
+
+/* ---- fix and rebook ---- */
+.fixbox { margin-top: 12px; padding: 12px 14px; background: var(--paper2); border: 1px dashed var(--line); border-radius: 10px; }
+.fixhead { font: 700 13px var(--display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink2); margin-bottom: 8px; }
+.fixbody { display: grid; gap: 10px; }
+.fixrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fixfield { display: grid; gap: 4px; font-size: 14px; color: var(--ink2); }
+.fixfield > span:first-child em { font-style: normal; color: var(--ink3); margin-left: 6px; }
+.inp { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--paper); min-height: 34px; min-width: 0; max-width: 100%; }
+.inp:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.inp.flag, .inp[aria-invalid="true"] { border-color: var(--amber); background: var(--amber-bg); }
+.cell { width: 88px; padding: 5px 8px; } .cell.wide { width: 100%; min-width: 120px; }
+.editgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; }
+table.edit td { vertical-align: top; }
+.fixprog { display: grid; gap: 8px; }
+.fixprog .row-actions { margin: 0; }
+.changes summary { cursor: pointer; font-weight: 600; }
+.changes table { margin-top: 8px; }
+.bookerr { background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 10px 14px; margin-top: 12px; font-size: 14px; }
+
+/* ---- fix and rebook ---- */
+.fixbox { margin-top: 12px; padding: 12px 14px; background: var(--paper2); border: 1px dashed var(--line); border-radius: 10px; }
+.fixhead { font: 700 13px var(--display); letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink2); margin-bottom: 8px; }
+.fixbody { display: grid; gap: 10px; }
+.fixrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fixfield { display: grid; gap: 4px; font-size: 14px; color: var(--ink2); }
+.fixfield > span:first-child em { font-style: normal; color: var(--ink3); margin-left: 6px; }
+.inp { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--paper); min-height: 34px; min-width: 0; max-width: 100%; }
+.inp:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.inp.flag, .inp[aria-invalid="true"] { border-color: var(--amber); background: var(--amber-bg); }
+.cell { width: 88px; padding: 5px 8px; } .cell.wide { width: 100%; min-width: 120px; }
+.editgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 14px; }
+table.edit td { vertical-align: top; }
+.fixprog { display: grid; gap: 8px; }
+.fixprog .row-actions { margin: 0; }
+.changes summary { cursor: pointer; font-weight: 600; }
+.changes table { margin-top: 8px; }
+.bookerr { background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 10px 14px; margin-top: 12px; font-size: 14px; }
+fieldset.lock { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 16px; }
+fieldset.lock:disabled .fixbox { display: none; }

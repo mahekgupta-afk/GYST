@@ -28,5 +28,22 @@ export function ensureSchema(): Promise<void> {
       results jsonb NOT NULL
     )`;
     await q`CREATE INDEX IF NOT EXISTS uploads_created_at_idx ON uploads (created_at DESC)`;
+    await q`CREATE TABLE IF NOT EXISTS bookings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      reference text NOT NULL UNIQUE,
+      booking_id text NOT NULL,
+      seller text,
+      source text NOT NULL,
+      file_name text,
+      carrier text NOT NULL,
+      pallets integer NOT NULL,
+      total_gbp numeric NOT NULL,
+      amber_count integer NOT NULL,
+      status text NOT NULL DEFAULT 'booked',
+      booking jsonb NOT NULL,
+      changes jsonb NOT NULL
+    )`;
+    await q`CREATE INDEX IF NOT EXISTS bookings_created_at_idx ON bookings (created_at DESC)`;
   })().catch(e => { ready = null; throw e; }));
 }

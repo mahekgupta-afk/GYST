@@ -351,6 +351,11 @@ function bookingsFromTables(bookingRows, itemRows) {
       currency: clean(r['currency']) || 'GBP', grossWeight: num(r['total gross weight kg']),
       appointment: apRaw ? (/^y/i.test(apRaw) ? 'Yes' : 'No') : 'No', items: []
     };
+    // Optional extra column written by corrected files: keeps a carrier the user chose. Absent in the standard template,
+    // in which case R-05 is checked against the carrier that matches the seller's priority, as before.
+    const carRaw = clean(pickKey(r, 'chosen carrier'));
+    const carM = carRaw && /^carrier\s*([abc])$/i.exec(carRaw);
+    if (carM) b._carrier = 'Carrier ' + carM[1].toUpperCase();
     bookings.push(b);
   });
   const byId = {}; bookings.forEach(b => { byId[b.id.toLowerCase()] = b; });
