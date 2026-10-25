@@ -25,6 +25,8 @@ export function checkBooking(input: any, clientToday?: string): BookingCheck {
   if (ev.status === 'blocked') {
     return { ok: false, status: 422, error: 'blocked', red: ev.counts.red, problems: ev.issues.filter((i: any) => i.sev === 'red').map((i: any) => i.title) };
   }
+  // A past ready date is reported as Amber (R-10) but cannot be booked until the date is corrected.
+  if (ev.issues.some((i: any) => i.rule === 'R-10')) return { ok: false, status: 422, error: 'past_date', problems: ['The ready to ship date is in the past. Change it to today or later.'] };
   // Warnings do not block a booking, but each one must have been acknowledged by the seller.
   const acks = new Set(Array.isArray(clean._acks) ? clean._acks : []);
   const open = ev.issues.filter((i: any) => i.sev === 'amber' && !acks.has(issueKey(i)));

@@ -69,6 +69,9 @@ export default function App() {
     const dateText = dp ? (dp.invalid ? '“' + dp.invalid + '” isn’t a real date. ' : '“' + dp.ambiguous + '” isn’t an exact date, so I haven’t saved one. ') + 'Please give me the day, for example 05-11-2026 or 5 Nov.' : '';
     const extra = [(log.scope || []).join('\n'), dateText].filter(Boolean).join('\n');
     const askAgain = a && !(dp && a.key === 'readyDate');
+    // A refused value: say which field and why, keep the old value, ask again. Valid values in the same message were still stored.
+    const refusals = (log.rejected || []).map((r: any) => r.message);
+    if (refusals.length) return { text: [ack, extra, ...refusals].filter(Boolean).join('\n'), chips: null };
     if (!log.understood) {
       if (extra) return { text: extra + (askAgain ? '\n' + a.q : ''), chips: a && askAgain ? a.chips : null };
       return { text: 'Sorry, I didn’t catch that. ' + (a ? (a.hint || '') + a.q : 'You can say things like “add a pallet”, “change the priority to Fastest”, “use Carrier B” or “book it”.'), chips: a ? a.chips : completeChips(null) };
@@ -88,7 +91,7 @@ export default function App() {
       return { text: 'Booking it with ' + ev.rec.selected.carrier + '…', chips: null };
     }
     const first = !prev.current;
-    const lines = ev.issues.slice(0, 6).map((i: any) => '• ' + (i.rule === 'DATA' ? 'Missing detail' : i.rule) + ': ' + i.title + (i.item ? ' (' + i.item + ')' : ''));
+    const lines = ev.issues.slice(0, 6).map((i: any) => '• ' + (i.rule === 'DATA' ? 'Missing detail' : i.rule === 'INPUT' ? 'Input error' : i.rule) + ': ' + i.title + (i.item ? ' (' + i.item + ')' : ''));
     if (ev.issues.length > 6) lines.push('• …and ' + (ev.issues.length - 6) + ' more');
     const verdict = ev.status === 'blocked' ? 'Pre-flight result: ' + plural(ev.counts.red, 'red problem') + (ev.counts.amber ? ' and ' + plural(ev.counts.amber, 'amber warning') : '') + '. Don’t ship yet.'
       : ev.status === 'warning' ? 'Pre-flight result: no red problems, but ' + plural(ev.counts.amber, 'amber warning') + '.'
@@ -138,7 +141,7 @@ export default function App() {
     setBusy(true);
     let aiFailed = false;
     const c0 = chat.current, snap = C.cloneChat(c0);
-    const askQ = c0.asked ? c0.asked.q : null;
+    const askQ = c0.reask ? c0.reask.message : c0.asked ? c0.asked.q : null;
     let log: any = null;
     if (aiOn) {
       say('bot', 'Reading your message…', null, true);
@@ -187,17 +190,20 @@ export default function App() {
   }
   const fixChat = (spec: Spec) => {
     const b = chat.current.b;
-    const before = PF.evaluate(b); applyChange(b, spec);
+    const before = PF.evaluate(b);
+    const res = applyChange(b, spec);
+    if (!res.ok) { say('bot', res.message, completeChips(before)); bump(); return res; }
     const ev = PF.evaluate(b), ch = b._changes[b._changes.length - 1];
     say('bot', 'Updated ' + ch.scope + ', ' + ch.field + ': ' + ch.from + ' → ' + ch.to + '. Checks re-run: ' + plural(ev.counts.red, 'red problem') + ', ' + plural(ev.counts.amber, 'amber warning') + ' (was ' + before.counts.red + ' and ' + before.counts.amber + ').', completeChips(ev));
     prev.current = { red: ev.counts.red, amber: ev.counts.amber };
     thump(); bump();
+    return res;
   };
   const ackChat = (keys: string[]) => { chat.current.b._acks = keys; bump(); };
   const resetChat = () => { resetBooking(chat.current.b); say('bot', 'Everything is back to the details you gave me.', completeChips(PF.evaluate(chat.current.b))); thump(); bump(); };
 
   const uploadHandlers: UploadHandlers = {
-    fix: (b, spec) => { applyChange(b, spec); thump(); bump(); },
+    fix: (b, spec) => { const r = applyChange(b, spec); thump(); bump(); return r; },
     reset: b => { resetBooking(b); thump(); bump(); },
     ack: (b, keys) => { b._acks = keys; bump(); },
     book: b => { void bookOne(b, 'upload', upload?.fileName); },

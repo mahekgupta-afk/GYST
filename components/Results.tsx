@@ -1,11 +1,11 @@
 'use client';
 import { useState, type ReactNode } from 'react';
 import { PF, C } from '@/lib/pf';
-import { hasChanges, canBook, unacknowledged, issueKey, type Spec, type Change } from '@/lib/fixes';
+import { hasChanges, canBook, hasPastDate, unacknowledged, issueKey, type Spec, type Change, type ApplyResult } from '@/lib/fixes';
 import { QuickFix, EditableSheet } from './FixEditor';
 
 export const plural = (n: number, w: string, p?: string) => n + ' ' + (n === 1 ? w : p || w + 's');
-export type Opts = { fix: (s: Spec) => void; book: () => void; reset: () => void; booking: boolean; ack: (keys: string[]) => void };
+export type Opts = { fix: (s: Spec) => ApplyResult | void; book: () => void; reset: () => void; booking: boolean; ack: (keys: string[]) => void };
 
 /* ---------- shared pieces ---------- */
 function RuleStrip({ ev }: { ev: any }) {
@@ -51,7 +51,7 @@ function Issues({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
         <article key={i.rule + n + (i.item || '') + i.title} className={'issue ' + i.sev}>
           <header>
             <span className={'pill ' + i.sev}>{i.sev === 'red' ? 'Red: must fix' : 'Amber: should fix'}</span>
-            <span className="pill grey">{i.rule === 'DATA' ? 'Missing data' : i.rule}</span>
+            <span className="pill grey">{i.rule === 'DATA' ? 'Missing data' : i.rule === 'INPUT' ? 'Input error' : i.rule}</span>
             {i.item ? <span className="pill grey">{'SKU ' + i.item}</span> : null}
             {i.row ? <span className="pill grey">{(i.bookingId ? i.bookingId + ' · ' : '') + i.sheet + ' sheet, row ' + i.row}</span> : null}
             <h4>{i.title}</h4>
@@ -140,7 +140,8 @@ function Confirmation({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
   const s = PF.summarise(b, ev);
   const booked = !!b._ref;
   const open = unacknowledged(b, ev);
-  const ambers = ev.issues.filter((i: any) => i.sev === 'amber');
+  const ambers = ev.issues.filter((i: any) => i.sev === 'amber' && i.rule !== 'R-10');
+  const pastDate = hasPastDate(ev);
   const ready = canBook(b, ev);
   return (
     <div className="card section confirm">
@@ -165,9 +166,10 @@ function Confirmation({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
               })}
             </div>
           ) : null}
+          {pastDate && ev.status !== 'blocked' ? <div className="warnbox" role="note" style={{ marginTop: 12 }}>The ready date is in the past (R-10). It’s a warning, but this booking can’t be made until you change the date to today or later.</div> : null}
           <div className="row-actions" style={{ margin: '14px 0 0' }}>
             <button className="btn" disabled={!ready || opts.booking} onClick={opts.book}>
-              {ev.status === 'blocked' ? 'Fix red items to book' : open.length ? 'Acknowledge the warnings to book' : opts.booking ? 'Booking…' : 'Book shipment'}
+              {ev.status === 'blocked' ? 'Fix red items to book' : pastDate ? 'Fix the date to book' : open.length ? 'Acknowledge the warnings to book' : opts.booking ? 'Booking…' : 'Book shipment'}
             </button>
           </div>
         </>
@@ -186,11 +188,12 @@ function FixProgress({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
   const ready = canBook(b, ev);
   const text = booked ? 'This booking has been booked.'
     : blocked ? 'Fix the ' + plural(ev.counts.red, 'red problem') + ' below, then you can book this shipment.'
+    : ev.status === 'warning' && hasPastDate(ev) ? 'No red problems left, but the ready date is in the past. Change it to today or later, then you can book.'
     : ev.status === 'warning' ? 'No red problems left. Fix the ' + plural(ev.counts.amber, 'warning') + ' to avoid delays, or acknowledge ' + (ev.counts.amber === 1 ? 'it' : 'each one') + ' below and book anyway.'
     : 'All ten rules pass. This shipment is ready to book.';
   return (
     <div className="card section fixprog">
-      <h3>{booked ? 'Booked' : blocked ? 'Fix, then book' : 'Ready to book'}</h3>
+      <h3>{booked ? 'Booked' : blocked || hasPastDate(ev) ? 'Fix, then book' : 'Ready to book'}</h3>
       <p style={{ margin: 0 }}>{text}</p>
       <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Problems resolved"><i style={{ width: pct + '%' }} /></div>
       <p className="note" style={{ margin: 0 }}>{'Started with ' + plural(start.counts.red, 'red problem') + ' and ' + plural(start.counts.amber, 'amber warning') + '. Now ' + ev.counts.red + ' red and ' + ev.counts.amber + ' amber.'}</p>
@@ -294,6 +297,7 @@ export function Detail({ b, opts, thumpKey, aiOn }: { b: any; opts: Opts; thumpK
 function StatusPills({ b, ev }: { b: any; ev: any }) {
   if (b._ref) return <span className="pill green">Booked</span>;
   if (ev.status === 'blocked') return <span><span className="pill red">{'Needs fixing: ' + ev.counts.red + ' red'}</span>{ev.counts.amber ? <> <span className="pill amber">{ev.counts.amber + ' amber'}</span></> : null}</span>;
+  if (hasPastDate(ev)) return <span className="pill amber">Fix the date to book</span>;
   if (ev.status === 'warning') return <span className="pill amber">{'Ready, ' + plural(ev.counts.amber, 'warning')}</span>;
   return <span className="pill green">Ready to book</span>;
 }
@@ -315,7 +319,7 @@ export function exportCSV(bookings: any[]) {
 }
 
 export type UploadHandlers = {
-  fix: (b: any, s: Spec) => void;
+  fix: (b: any, s: Spec) => ApplyResult | void;
   book: (b: any) => void;
   reset: (b: any) => void;
   ack: (b: any, keys: string[]) => void;

@@ -5,6 +5,7 @@
 import * as PF from '../engine/engine';
 import { parseDateText, DATE_CUE } from './dates';
 import { checkScope } from './scope';
+import { rejectedClaims, checkNumber, checkHs, checkReadyDate, chatRejection, chatHsRejection, parseNumeric, FIELDS } from '../validate';
 const { ORIGINS, DESTS, COUNTRIES, PRIORITIES, gbp, nf, dmy, niceDate } = PF;
 
 const WORD = "(?:(?!(?:at|@|for|in|with|packed|priced|each|from|made|to|and|per|every|are|is|of|on|by|please)\\b)[A-Za-z][A-Za-z0-9'\\-]*)";
@@ -459,6 +460,92 @@ function dateProblemOf(text, today, ask, ex) {
   const cue = (ask && (ask.key === 'readyDate' || ask.key === 'basics')) || DATE_CUE.test(text);
   return !dp.iso && cue && (dp.ambiguous || dp.invalid) && !(ex.b && ex.b.readyDate) ? dp : null;
 }
+/* ---------- Validation of values entering the booking from chat (the rules live in ../validate) ---------- */
+const FK_BOOK = { pallets: 'pallets', cartons: 'cartons', declaredValue: 'declaredValue', grossWeight: 'grossWeight' };
+const FK_ITEM = { qty: 'qty', price: 'price', upc: 'upc', cartons: 'itemCartons', unitWeight: 'unitWeight' };
+const emptyEx = () => ({ b: {}, item: {}, rel: [], sets: [], flags: {}, itemTarget: null, carrier: null, intent: null, items: null });
+const itemKeyOf = fk => Object.keys(FK_ITEM).find(k => FK_ITEM[k] === fk) || null;
+function dropField(ex, fk) {
+  const bk = FK_BOOK[fk];
+  if (bk) { delete ex.b[bk]; ex.rel = ex.rel.filter(r => r.field !== bk); ex.sets = ex.sets.filter(x => x.field !== bk); }
+  const ik = fk === 'hs' ? 'hs' : (itemKeyOf(fk) || (fk === 'cartons' ? 'cartons' : null));   // a bare "cartons" claim could be either level
+  if (ik) { delete ex.item[ik]; ex.sets = ex.sets.filter(x => x.field !== 'item.' + ik); (ex.items || []).forEach(i => { i[ik] = null; }); }
+}
+function reject(list, field, message, extra) { if (!list.some(r => r.field === field)) list.push(Object.assign({ field, message }, extra || {})); }
+
+/** Checks everything a message tried to put into the booking. Invalid values are dropped; the sentence to show is returned. */
+function sanitizeExtraction(c, ex, text, today, askKey) {
+  const rej = [];
+  const idx = currentItemIdx(c);
+  // 1. Numbers the seller attached to a field, read straight from the text (zero, negative, word forms).
+  rejectedClaims(text).forEach(r => { dropField(ex, r.field); reject(rej, r.field, r.message, { itemIdx: idx }); });
+  // 2. Values that extraction produced, including anything a language model returned.
+  Object.keys(FK_BOOK).forEach(k => {
+    const vals = [ex.b[k]].concat(ex.sets.filter(x => x.field === k).map(x => x.value)).filter(v => v !== undefined && v !== null);
+    for (const v of vals) { const r = checkNumber(FK_BOOK[k], v); if (!r.ok) { dropField(ex, k); reject(rej, k, chatRejection(k, r)); break; } }
+  });
+  Object.keys(FK_ITEM).forEach(k => {
+    const vals = [ex.item[k]].concat(ex.sets.filter(x => x.field === 'item.' + k).map(x => x.value)).concat((ex.items || []).map(i => i[k])).filter(v => v !== undefined && v !== null);
+    for (const v of vals) { const r = checkNumber(FK_ITEM[k], v); if (!r.ok) { dropField(ex, FK_ITEM[k]); reject(rej, FK_ITEM[k], chatRejection(FK_ITEM[k], r), { itemIdx: idx }); break; } }
+  });
+  const hsVals = [ex.item.hs].concat(ex.sets.filter(x => x.field === 'item.hs').map(x => x.value)).concat((ex.items || []).map(i => i.hs)).filter(v => v !== undefined && v !== null);
+  for (const v of hsVals) { const r = checkHs(v); if (!r.ok) { dropField(ex, 'hs'); reject(rej, 'hs', chatHsRejection(r), { itemIdx: idx }); break; } }
+  // A bare reply to the HS question is checked as typed ("TBC", "-691200", "0"), because extraction may have tidied it into something valid.
+  if (askKey === 'item.hs' && !ex.flags.skipHS && !SKIP.test(text) && !/don'?t know|not sure/i.test(text)) {
+    const t = text.trim();
+    if (/^[-−–]?[\w./]{1,24}$/.test(t) || /^[-−–]?[\d.\s]{1,24}$/.test(t)) {
+      const r = checkHs(t);
+      if (!r.ok) { dropField(ex, 'hs'); reject(rej, 'hs', chatHsRejection(r), { itemIdx: idx }); }
+    }
+  }
+  // 3. A ready date in the past is not accepted (today is). The old date, if there is one, stays.
+  const dateVals = [ex.b.readyDate].concat(ex.sets.filter(x => x.field === 'readyDate').map(x => x.value)).filter(v => v);
+  for (const v of dateVals) {
+    const d = checkReadyDate(v, today);
+    if (!d.ok) { delete ex.b.readyDate; ex.sets = ex.sets.filter(x => x.field !== 'readyDate'); reject(rej, 'readyDate', d.message); break; }
+  }
+  return rej;
+}
+
+/** After applying, undo any change that left a covered field invalid (for example "remove a pallet" down to 0). */
+function revertInvalid(c, snap, log, rej, today) {
+  const b = c.b;
+  if (b.readyDate !== snap.readyDate && b.readyDate) {
+    const d = checkReadyDate(b.readyDate, today);
+    if (!d.ok) { b.readyDate = snap.readyDate; log.set = log.set.filter(e => e.field !== 'readyDate'); log.changed = log.changed.filter(e => e.field !== 'readyDate'); reject(rej, 'readyDate', d.message); }
+  }
+  const undo = (field, isItem) => { const keep = e => !(e.field === field && (isItem ? e.item !== null : e.item === null)); log.set = log.set.filter(keep); log.changed = log.changed.filter(keep); };
+  Object.keys(FK_BOOK).forEach(k => {
+    if (b[k] !== snap[k] && b[k] !== null && b[k] !== undefined) {
+      const r = checkNumber(FK_BOOK[k], b[k]);
+      if (!r.ok) { b[k] = snap[k]; undo(k, false); reject(rej, k, chatRejection(k, r)); }
+    }
+  });
+  b.items.forEach((it, i) => {
+    const old = snap.items[i] || {};
+    Object.keys(FK_ITEM).forEach(k => {
+      if (it[k] !== old[k] && it[k] !== null && it[k] !== undefined) {
+        const r = checkNumber(FK_ITEM[k], it[k]);
+        if (!r.ok) { it[k] = old[k] === undefined ? null : old[k]; undo(k, true); reject(rej, FK_ITEM[k], chatRejection(FK_ITEM[k], r), { itemIdx: i }); }
+      }
+    });
+  });
+}
+
+/** A bare reply ("3", "£5", "5 Nov") right after a refusal answers the refused field, not whatever question comes next. */
+function applyReask(c, ex, pending, text, today) {
+  const f = pending.field;
+  if (f === 'readyDate') { const d = dateOf(text, today); if (!d) return ex; const out = emptyEx(); out.b.readyDate = d; return out; }
+  if (!(f in FIELDS)) return ex;
+  const m = /^\s*[£]?\s*(-?\s?\d[\d,]*(?:\.\d+)?|\.\d+|zero|none|nil|no|minus\s+\d[\d,]*(?:\.\d+)?)\s*(?:kg|kgs|gbp|pounds?|units?|pallets?|cartons?)?\s*[.!]?\s*$/i.exec(text);
+  if (!m) return ex;
+  const p = parseNumeric(m[1].replace(/\s+/g, ' ').replace(/^-\s/, '-'), true);
+  if (p.kind !== 'number') return ex;
+  const out = emptyEx();
+  if (FK_BOOK[f]) out.b[f] = p.n; else { out.item[itemKeyOf(f)] = p.n; out.itemTarget = pending.itemIdx != null ? pending.itemIdx : null; }
+  return out;
+}
+
 function step(c, text, opts) {
   opts = opts || {};
   text = String(text).replace(/[\u2018\u2019]/g, "'");
@@ -466,18 +553,26 @@ function step(c, text, opts) {
   const log = { set: [], changed: [], notes: [], understood: false, intent: null, reset: false };
   const ask = c.asked;
   const askKey = ask ? ask.key : null;
+  const pending = c.reask || null;
+  c.reask = null;
   const all = extractAll(text, c, askKey, today);
   if (all.intent === 'reset') { log.reset = true; return log; }
-  const ex = mergeEx(answerFor(ask, text, c, today), all);
+  let ex = mergeEx(answerFor(ask, text, c, today), all);
+  if (pending) ex = applyReask(c, ex, pending, text, today);
   const sc = checkScope(text);
   applyScope(ex, sc);
   log.scope = sc.messages;
   log.dateProblem = dateProblemOf(text, today, ask, ex);
   if (ex.intent) log.intent = ex.intent;
+  const rej = sanitizeExtraction(c, ex, text, today, askKey);
+  log.rejected = rej;
+  const snap = JSON.parse(JSON.stringify(c.b));
   const before = JSON.stringify(c.b) + '|' + c.itemsDone + '|' + c.wantMore;
   const hadHS = c.b.items.length ? c.b.items[c.b.items.length - 1].skipHS : false;
   const hadCOO = c.b.items.length ? c.b.items[c.b.items.length - 1].skipCOO : false;
   applyEx(c, ex, log);
+  revertInvalid(c, snap, log, rej, today);
+  c.reask = rej.find(r => r.field !== 'hs') || null;
   const last = c.b.items[c.b.items.length - 1];
   if (last && last.skipHS && !hadHS) log.notes.push('No problem, I’ll leave the HS code blank. Customs needs at least 6 digits, so the checks will flag it.');
   if (last && last.skipCOO && !hadCOO) log.notes.push('OK, I’ll leave the country of origin blank. The checks will flag it.');
@@ -668,7 +763,7 @@ function aiToEx(o, c) {
   if (o.destType === 'Warehouse' || o.destType === 'Business address') ex.b.destType = o.destType;
   // The ready date is never taken from the model: it is resolved from the text by parseDateText.
   if (PRIORITIES.indexOf(o.priority) >= 0) ex.b.priority = o.priority;
-  ['pallets', 'cartons', 'declaredValue', 'grossWeight'].forEach(k => { const v = nm(o[k]); if (v !== undefined && v >= 0) ex.b[k] = v; });
+  ['pallets', 'cartons', 'declaredValue', 'grossWeight'].forEach(k => { const v = nm(o[k]); if (v !== undefined) ex.b[k] = v; });
   if (o.appointment === 'Yes' || o.appointment === 'No') ex.b.appointment = o.appointment;
   if (o.itemsDone === true) ex.flags.itemsDone = true;
   if (Array.isArray(o.items)) {
@@ -676,7 +771,7 @@ function aiToEx(o, c) {
       const it = blankItem();
       it.sku = str(i.sku) || null; it.desc = str(i.desc) || null;
       const hs = i.hs == null ? null : String(i.hs).replace(/[\s.]/g, ''); it.hs = hs && /^\d+$/.test(hs) ? hs : null;
-      ['qty', 'price', 'upc', 'cartons', 'unitWeight'].forEach(k => { const v = nm(i[k]); it[k] = v !== undefined && v >= 0 ? v : null; });
+      ['qty', 'price', 'upc', 'cartons', 'unitWeight'].forEach(k => { const v = nm(i[k]); it[k] = v !== undefined ? v : null; });
       it.coo = COUNTRIES.find(x => str(i.coo) && x.toLowerCase() === i.coo.toLowerCase()) || null;
       it.skipHS = i.skipHS === true; it.skipCOO = i.skipCOO === true;
       return it;
@@ -708,6 +803,9 @@ function stepAI(c, text, ex, opts) {
   const before = JSON.stringify(c.b) + c.itemsDone;
   const ask = c.asked;
   const today = opts.todayISO || PF.todayISO();
+  const pending = c.reask || null;
+  c.reask = null;
+  if (pending) { const re = applyReask(c, { b: ex.b, item: ex.item, rel: [], sets: [], flags: {}, itemTarget: null, carrier: null, intent: null, items: ex.items }, pending, text, today); if (re.b !== ex.b || re.item !== ex.item) { ex = Object.assign({}, ex, { b: re.b, item: re.item, items: null, itemTarget: re.itemTarget }); } }
   // Dates, scope and SKUs are decided by deterministic code. Whatever the model said about them is checked or dropped here.
   const dp = parseDateText(text, today);
   if (dp.iso && ((ask && (ask.key === 'readyDate' || ask.key === 'basics')) || DATE_CUE.test(text))) ex.b.readyDate = dp.iso; else delete ex.b.readyDate;
@@ -720,10 +818,16 @@ function stepAI(c, text, ex, opts) {
     if (it.sku && !(known && known.sku === it.sku) && text.toLowerCase().indexOf(String(it.sku).toLowerCase()) < 0) it.sku = null;
   });
   if (/^\s*(start over|new booking|reset)\b/i.test(text)) { log.reset = true; return log; }
+  ex.rel = ex.rel || []; ex.sets = ex.sets || []; ex.flags = ex.flags || {}; ex.item = ex.item || {};
+  const rej = sanitizeExtraction(c, ex, text, today, ask ? ask.key : null);
+  log.rejected = rej;
+  const snap = JSON.parse(JSON.stringify(c.b));
   const cm = /\b(?:use|switch to|choose|pick|go with|select|take)\s+carrier\s+([abc])\b/i.exec(text);
   if (cm) { c.b._carrier = 'Carrier ' + cm[1].toUpperCase(); log.set.push({ field: 'carrier', label: 'carrier', to: c.b._carrier, item: null }); }
   if (/\b(confirm(?: it| the booking| booking)?|book it|go ahead|proceed|lock it in)\b/i.test(text) && c.started && !ask) log.intent = 'confirm';
   applyAI(c, ex, log);
+  revertInvalid(c, snap, log, rej, today);
+  c.reask = rej.find(r => r.field !== 'hs') || null;
   if (ask && ask.key === 'item.more') {
     if (/another|one more|^\s*(?:yes|yeah|yep|add)/i.test(text)) { c.wantMore = true; c.itemsDone = false; log.understood = true; }
     else if (/everything|that'?s (?:all|it)|nothing else|^\s*(?:no|nope|done)/i.test(text)) { c.itemsDone = true; log.understood = true; }

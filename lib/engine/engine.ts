@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { FIELDS, checkNumber, checkHs, inputErrorText } from '../validate';
 // Ported unchanged from the tested prototype (engine.js). Pure functions, no DOM.
 /* Preflight engine: reference data, rulebook checks, carrier logic, spreadsheet reading. */
 
@@ -194,12 +195,45 @@ function hazardOf(it) {
 }
 function hsInfo(v) {
   if (v === null || v === undefined || String(v).trim() === '') return { blank: true };
-  const raw = String(v).trim(), digits = raw.replace(/[\s.\-]/g, '');
-  return { blank: false, raw, digits, numeric: typeof v === 'number', valid: /^\d+$/.test(digits) };
+  const c = checkHs(v);
+  const raw = String(v).trim(), digits = raw.replace(/[\s.]/g, '');
+  // Only digits count. A leading minus or a letter makes the code invalid; all zeros is invalid whatever the length.
+  return { blank: false, raw, digits, numeric: typeof v === 'number', valid: c.ok || c.reason === 'zeros', zeros: !c.ok && c.reason === 'zeros', negative: !c.ok && c.reason === 'negative' };
+}
+
+/* ---------- Input validation (shared with chat, the fix inputs and the editable table) ---------- */
+const BOOK_KEYS = [['pallets', 'pallets'], ['cartons', 'cartons'], ['declaredValue', 'declaredValue'], ['grossWeight', 'grossWeight']];
+const ITEM_KEYS = [['qty', 'qty'], ['price', 'price'], ['upc', 'upc'], ['cartons', 'itemCartons'], ['unitWeight', 'unitWeight']];
+// Present-but-unacceptable numbers (0, negative, a fractional count, text) are reported as input errors. Their value is then
+// treated as missing for the calculations, so no rule shows a misleading result based on a zero.
+// The original spreadsheet cell is used only while the value is unchanged; once someone edits it, the edited value is what counts.
+const rawFor = (obj, key) => (obj._raw && key in obj._raw && num(obj._raw[key]) === obj[key]) ? obj._raw[key] : obj[key];
+function sanitizeInputs(bIn) {
+  const found = [];
+  const b = Object.assign({}, bIn, { items: (bIn.items || []).map(i => Object.assign({}, i)), _bad: {} });
+  BOOK_KEYS.forEach(([key, fk]) => {
+    const raw = rawFor(bIn, key);
+    const c = checkNumber(fk, raw);
+    if (c.ok) b[key] = c.value;
+    else if (c.reason !== 'blank') { b._bad[key] = true; b[key] = null; found.push({ scope: 'booking', key, fk, check: c }); }
+  });
+  b.items.forEach((it, idx) => {
+    it._bad = {};
+    const src = bIn.items[idx];
+    ITEM_KEYS.forEach(([key, fk]) => {
+      const raw = rawFor(src, key);
+      const c = checkNumber(fk, raw);
+      if (c.ok) it[key] = c.value;
+      else if (c.reason !== 'blank') { it._bad[key] = true; it[key] = null; found.push({ scope: 'item', idx, key, fk, check: c }); }
+    });
+  });
+  return { b, found };
 }
 
 /* ---------- Rule engine ---------- */
-function evaluate(b, opts) {
+function evaluate(bIn, opts) {
+  const san = sanitizeInputs(bIn);
+  const b = san.b;
   const today = (opts && opts.todayISO) || todayISO();
   const items = b.items || [];
   const issues = [], skipped = {};
@@ -214,15 +248,29 @@ function evaluate(b, opts) {
   if (b._dupCount > 1) data('Duplicate Booking ID', 'The Booking ID “' + b.id + '” appears ' + b._dupCount + ' times in the Bookings sheet (rows ' + (b._dupRows || []).join(', ') + '). Items can only be linked to one of them' + (b._dupLater ? ', and they were linked to the first row, so this row has none.' : '.'), 'Give every booking its own Booking ID, then upload the file again.');
   if (!items.length && !b._dupLater) data('No items found', 'This booking has no product lines in the Items sheet, so nothing can be checked against the invoice.', 'Add at least one product line with quantity, price and carton details.');
   if (rec.error) data('Route not supported', 'We can only book from the UK to Germany, France or the Netherlands. Destination country is “' + (b.destCountry || 'blank') + '”.', 'Use Germany, France or the Netherlands as the destination country.');
-  if (b.pallets === null || b.pallets === undefined) data('Pallet count missing', 'Number of pallets is blank, so weight per pallet and price can’t be worked out.', 'Enter how many pallets the shipment is on.');
-  else if (!(typeof b.pallets === 'number' && isFinite(b.pallets) && b.pallets > 0 && Number.isInteger(b.pallets))) data('Pallet count isn’t valid', 'Number of pallets is ' + b.pallets + ', but it must be a whole number of at least 1, so weight per pallet and price can’t be worked out.', 'Enter how many pallets the shipment is on (1 or more).');
-  if (typeof b.grossWeight !== 'number') data('Gross weight missing', 'Total gross weight is blank or not a number.', 'Enter the total weight of everything shipped, including cartons and pallets.');
+  if ((b.pallets === null || b.pallets === undefined) && !b._bad.pallets) data('Pallet count missing', 'Number of pallets is blank, so weight per pallet and price can’t be worked out.', 'Enter how many pallets the shipment is on.');
+  if (typeof b.grossWeight !== 'number' && !b._bad.grossWeight) data('Gross weight missing', 'Total gross weight is blank or not a number.', 'Enter the total weight of everything shipped, including cartons and pallets.');
   const itemMiss = [];
   items.forEach(it => {
-    [['qty', 'quantity'], ['price', 'unit price'], ['upc', 'units per carton'], ['cartons', 'cartons'], ['unitWeight', 'unit weight']].forEach(([k, n]) => { if (typeof it[k] !== 'number') itemMiss.push({ it, k, n }); });
+    [['qty', 'quantity'], ['price', 'unit price'], ['upc', 'units per carton'], ['cartons', 'cartons'], ['unitWeight', 'unit weight']].forEach(([k, n]) => { if (typeof it[k] !== 'number' && !(it._bad && it._bad[k])) itemMiss.push({ it, k, n }); });
   });
   itemMiss.forEach(m => data('Missing ' + m.n + ' for ' + (m.it.sku || 'an item'), label(m.it) + ' has no usable ' + m.n + '.', 'Fill in ' + m.n + ' for this item.', m.it));
   const has = (k) => items.every(i => typeof i[k] === 'number');
+  // Input errors (Red): separate from R-01..R-10, but they block booking like any Red.
+  san.found.forEach(f => {
+    const info = FIELDS[f.fk], src = f.scope === 'item' ? items[f.idx] : null;
+    const fromFile = src ? !!src._row : !!b._row;
+    const row = src ? src._row : b._row;
+    const sheet = src ? 'Items' : 'Bookings';
+    const text = inputErrorText(f.fk, f.check);
+    info.affects.forEach(r => { skipped[r] = 1; });
+    add('INPUT', 'red', 'Input error: ' + info.column + (src && src.sku ? ' (' + src.sku + ')' : ''),
+      (fromFile ? (b.id || '') + ' · ' + sheet + ' sheet, row ' + row + ' · ' : '') + text,
+      (info.whole ? 'Enter a whole number greater than 0' : 'Enter a number greater than 0') + ' for ' + info.label.toLowerCase() + '. Checks that depend on it (' + info.affects.join(', ') + ') were skipped for this booking because of this input error, and will run once it is fixed.',
+      src ? src.sku : null, src || undefined);
+    const made = issues[issues.length - 1];
+    made.field = f.fk; made.itemIndex = f.scope === 'item' ? f.idx : null;      // lets the Fix it here box target the right cell
+  });
 
   const noItems = !items.length;
   const pence = v => Math.round(v * 100 + 1e-7);
@@ -234,13 +282,14 @@ function evaluate(b, opts) {
   items.forEach(it => {
     const h = hsInfo(it.hs);
     if (h.blank) add('R-01', 'red', 'HS code missing', label(it) + ' has no HS code. Customs can’t classify it, so it is likely to be held.', 'Look the product up in the UK Trade Tariff (gov.uk/trade-tariff) and enter at least the first 6 digits.', it.sku, it);
+    else if (h.zeros) add('R-01', 'red', 'HS code is all zeros', (it.sku || 'This item') + ' has the HS code “' + h.raw + '”, which is all zeros. Enter a real code of at least 6 digits from the UK Trade Tariff.', 'Look the product up in the UK Trade Tariff (gov.uk/trade-tariff) and enter a real code of at least 6 digits.', it.sku, it);
     else if (!h.valid) add('R-01', 'red', 'HS code isn’t a number', label(it) + ' has the HS code “' + h.raw + '”, which contains characters other than digits.', 'Enter digits only, at least 6 (for example 691200).', it.sku, it);
     else if (h.digits.length < 6) add('R-01', 'red', 'HS code too short', label(it) + ' has the HS code “' + h.raw + '” with only ' + h.digits.length + ' digits. At least 6 are required.' + (h.digits.length === 5 ? ' A leading zero may have been dropped (for example 090111 saved as 90111).' : ''), 'Replace it with the full code (6 digits or more) from the UK Trade Tariff.' + (h.digits.length === 5 ? ' Format the HS code column as text so leading zeros stay.' : ''), it.sku, it);
   });
 
   // R-02 declared value (compared in whole pence; up to and including exactly 1% of the items total passes)
   if (noItems) skipped['R-02'] = 1;
-  else if (typeof b.declaredValue !== 'number') { skipped['R-02'] = 1; data('Declared value missing', 'Total declared value is blank or not a number.', 'Enter the total value of the goods in GBP.'); }
+  else if (typeof b.declaredValue !== 'number') { skipped['R-02'] = 1; if (!b._bad.declaredValue) data('Declared value missing', 'Total declared value is blank or not a number.', 'Enter the total value of the goods in GBP.'); }
   else if (!has('qty') || !has('price')) skipped['R-02'] = 1;
   else {
     const decP = pence(b.declaredValue), sumP = pence(sumVal), diffP = Math.abs(decP - sumP);
@@ -266,7 +315,7 @@ function evaluate(b, opts) {
 
   // R-04 total cartons
   if (noItems) skipped['R-04'] = 1;
-  else if (typeof b.cartons !== 'number') { skipped['R-04'] = 1; data('Total cartons missing', 'The booking’s total cartons is blank or not a number.', 'Enter the total number of cartons.'); }
+  else if (typeof b.cartons !== 'number') { skipped['R-04'] = 1; if (!b._bad.cartons) data('Total cartons missing', 'The booking’s total cartons is blank or not a number.', 'Enter the total number of cartons.'); }
   else if (!has('cartons')) skipped['R-04'] = 1;
   else if (Math.abs(b.cartons - sumCartons) > 1e-9) add('R-04', 'red', 'Total cartons don’t match the items',
     'The booking says ' + b.cartons + ' cartons, but the items add up to ' + sumCartons + '. Labels and counts at the warehouse won’t match the declaration.',
@@ -325,7 +374,7 @@ function evaluate(b, opts) {
   }
 
   const order = { red: 0, amber: 1 };
-  const ruleNo = r => r === 'DATA' ? 0 : parseInt(r.slice(2), 10);
+  const ruleNo = r => (r === 'DATA' || r === 'INPUT') ? 0 : parseInt(r.slice(2), 10);
   issues.sort((a, c) => order[a.sev] - order[c.sev] || ruleNo(a.rule) - ruleNo(c.rule));
   const counts = { red: issues.filter(i => i.sev === 'red').length, amber: issues.filter(i => i.sev === 'amber').length };
   const ruleStatus = {};
@@ -419,6 +468,7 @@ function bookingsFromTables(bookingRows, itemRows, opts) {
       destType: dtRaw ? (/ware/i.test(dtRaw) ? 'Warehouse' : 'Business address') : null,
       readyDate: parseDate(r['ready to ship date']), readyDateRaw: r['ready to ship date'],
       priority: pr || null, priorityRaw: prRaw,
+      _raw: { pallets: r['pallets'], cartons: r['cartons'], declaredValue: pick(r, 'total declared value', 'declared value'), grossWeight: pick(r, 'total gross weight kg', 'total gross weight', 'gross weight kg', 'gross weight') },
       pallets: num(r['pallets']), cartons: num(r['cartons']), declaredValue: num(pick(r, 'total declared value', 'declared value')),
       currency: clean(r['currency']) || 'GBP', grossWeight: num(pick(r, 'total gross weight kg', 'total gross weight', 'gross weight kg', 'gross weight')),
       appointment: apRaw && /^(y|yes|true|1)$/i.test(apRaw) ? 'Yes' : 'No', items: []
@@ -447,6 +497,7 @@ function bookingsFromTables(bookingRows, itemRows, opts) {
     const b = byId[id.toLowerCase()];
     const item = {
       _row: r._row,
+      _raw: { qty: pick(r, 'quantity units', 'quantity'), price: r['unit price'], upc: r['units per carton'], cartons: r['cartons'], unitWeight: pick(r, 'unit weight kg', 'unit weight') },
       sku: clean(r['sku']), desc: clean(r['description']), hs: (r['hs code'] === null || r['hs code'] === undefined || String(r['hs code']).trim() === '') ? null : r['hs code'],
       qty: num(pick(r, 'quantity units', 'quantity')), price: num(r['unit price']), upc: num(r['units per carton']), cartons: num(r['cartons']),
       unitWeight: num(pick(r, 'unit weight kg', 'unit weight')), coo: isBlankish(r['country of origin']) ? null : clean(r['country of origin'])

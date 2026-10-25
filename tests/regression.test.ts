@@ -95,12 +95,15 @@ describe('2-3. carrier recommendation and R-05 (A2, A5)', () => {
     expect(ev(booking({ pallets: 1, grossWeight: 500 })).rec.options.find((o: any) => o.carrier === 'Carrier A').eligible).toBe(true);
     expect(ev(booking({ pallets: 1, grossWeight: 501 })).rec.options.find((o: any) => o.carrier === 'Carrier A').eligible).toBe(false);
   });
-  it('pallets 0, blank or negative give a clear error, never Infinity or NaN', () => {
-    for (const pallets of [0, null, -2, 2.5]) {
+  it('a blank pallet count is a missing-data message; 0, negative and fractional pallets are input errors; never Infinity or NaN', () => {
+    const blank = ev(booking({ pallets: null }));
+    expect(blank.issues.some((i: any) => i.rule === 'DATA' && /Pallet count/.test(i.title))).toBe(true);
+    for (const pallets of [0, -2, 2.5]) {
       const e = ev(booking({ pallets }));
-      expect(e.issues.some((i: any) => i.rule === 'DATA' && /Pallet count/.test(i.title))).toBe(true);
-      expect(JSON.stringify(e.issues)).not.toMatch(/Infinity|NaN/);
+      expect(e.issues.some((i: any) => i.rule === 'INPUT' && /Pallets/.test(i.title))).toBe(true);
+      expect(JSON.stringify(e.issues) + e.rec.reason).not.toMatch(/Infinity|NaN/);
       expect(e.rec.wpp).toBeNull();
+      expect(e.ruleStatus['R-05']).toBe('na');
     }
   });
   it('tie-breaks are deterministic: price, then days, then carrier letter', () => {
@@ -135,7 +138,8 @@ describe('4-6. R-02, R-03, R-04 (B3, B6)', () => {
     expect(rules(sized(2525))).not.toContain('R-02');
     expect(rules(sized(2475))).not.toContain('R-02');
     expect(rules(sized(2525.01))).toContain('R-02');
-    expect(issue(sized(0), 'R-02').what).toContain('£0');
+    expect(issue(sized(0), 'INPUT').what).toContain('Total declared value is 0');   // zero is an input error now
+    expect(ev(sized(0)).ruleStatus['R-02']).toBe('na');
     expect(ev(sized(null as any)).issues.some((i: any) => /Declared value missing/.test(i.title))).toBe(true);
     expect(JSON.stringify(ev(sized(0)).issues)).not.toMatch(/NaN|Infinity/);
   });
@@ -422,7 +426,8 @@ describe('13. start over and booking while Red remains (C4, C5)', () => {
     expect(r.problems.join(' ')).toMatch(/Declared value/);
   });
   it('warnings must each be acknowledged before the server will book', () => {
-    const b = booking({ readyDate: '2026-10-20', declaredValue: 100 });
+    const b = booking({ destType: 'Warehouse', appointment: 'No', declaredValue: 100 });
+    expect(rules(b)).toEqual(['R-08']);
     expect(ev(b).status).toBe('warning');
     expect((checkBooking(b) as any).error).toBe('warnings_not_acknowledged');
     b._acks = ev(b).issues.map((i: any) => [i.rule, i.item || '', i.title].join('|'));

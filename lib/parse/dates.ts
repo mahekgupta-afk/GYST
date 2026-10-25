@@ -55,7 +55,16 @@ export function parseDateText(text: string, today: string): DateParse {
   if (m) { const iso = isoOf(m[3] ? +m[3] : year, monthNum(m[1]), +m[2]); return iso ? { iso } : { invalid: m[0] }; }
 
   // Phrases too vague to turn into one day: ask instead of guessing.
-  m = /\b(next\s+week|this\s+week|next\s+month|this\s+month|end\s+of\s+(?:the\s+)?(?:next\s+)?(?:week|month|year)|start\s+of\s+(?:the\s+)?(?:next\s+)?(?:week|month)|beginning\s+of\s+(?:the\s+)?(?:next\s+)?(?:week|month)|mid[\s-]?(?:week|month)|asap|as\s+soon\s+as\s+possible|soon|in\s+a\s+few\s+days|in\s+a\s+couple\s+of\s+days|in\s+a\s+couple\s+of\s+weeks|in\s+a\s+few\s+weeks|sometime|whenever|a\s+week\s+or\s+so)\b/i.exec(t);
+  m = /\b(next\s+week|this\s+week|last\s+week|last\s+month|next\s+month|this\s+month|end\s+of\s+(?:the\s+)?(?:next\s+)?(?:week|month|year)|start\s+of\s+(?:the\s+)?(?:next\s+)?(?:week|month)|beginning\s+of\s+(?:the\s+)?(?:next\s+)?(?:week|month)|mid[\s-]?(?:week|month)|asap|as\s+soon\s+as\s+possible|soon|in\s+a\s+few\s+days|in\s+a\s+couple\s+of\s+days|in\s+a\s+couple\s+of\s+weeks|in\s+a\s+few\s+weeks|sometime|whenever|a\s+week\s+or\s+so)\b/i.exec(t);
+
+  // Past phrases resolve too, so the caller can refuse them: "2 days ago", "last Friday".
+  const ago = /\b(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(day|week)s?\s+ago\b/i.exec(t);
+  if (ago && count(ago[1])) return { iso: addDaysISO(today, -count(ago[1]) * (ago[2].toLowerCase() === 'week' ? 7 : 1)) };
+  const lastWd = /\blast\s+(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*day\b/i.exec(t);
+  if (lastWd) {
+    const back = ((weekdayOf(today) - DAYS[lastWd[1].toLowerCase()] + 7) % 7) || 7;
+    return { iso: addDaysISO(today, -back) };
+  }
 
   // Relative days. "in 3 days" / "in two weeks" are exact enough to resolve.
   if (/\bday\s+after\s+tomorrow\b/i.test(t)) return { iso: addDaysISO(today, 2) };
