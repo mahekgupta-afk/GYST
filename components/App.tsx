@@ -17,6 +17,7 @@ export default function App() {
   const [aiOn, setAiOn] = useState(false);
   const [upload, setUpload] = useState<any>(null);
   const [sel, setSelState] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>('all');
   const [thumpKey, setThumpKey] = useState(0);
   const [today, setToday] = useState('');
   const [uploadMsg, setUploadMsg] = useState('');
@@ -191,7 +192,7 @@ export default function App() {
     bulk,
   };
 
-  const showUpload = (u: any) => { setUpload(u); setSelState(null); thump(); setMode('upload'); };
+  const showUpload = (u: any) => { setUpload(u); setSelState(null); setFilter('all'); thump(); setMode('upload'); };
   async function handleFile(file: File) {
     setUploadMsg('Reading ' + file.name + '…');
     try {
@@ -289,7 +290,7 @@ export default function App() {
               <Detail b={b} aiOn={aiOn} thumpKey={thumpKey} opts={{ fix: fixChat, book: () => { void bookChat(); }, reset: resetChat, booking: bookBusy }} />
             )
           ) : (
-            <UploadResults upload={upload} sel={sel} setSel={setSel} thumpKey={thumpKey} aiOn={aiOn} h={uploadHandlers} />
+            <UploadResults upload={upload} sel={sel} setSel={setSel} filter={filter} setFilter={setFilter} thumpKey={thumpKey} aiOn={aiOn} h={uploadHandlers} />
           )}
         </section>
       </main>

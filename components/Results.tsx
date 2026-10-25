@@ -286,7 +286,7 @@ export type UploadHandlers = {
   bulk: { done: number; total: number } | null;
 };
 
-export function UploadResults({ upload, sel, setSel, thumpKey, aiOn, h }: { upload: any; sel: string | null; setSel: (id: string | null) => void; thumpKey: number; aiOn: boolean; h: UploadHandlers }) {
+export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey, aiOn, h }: { upload: any; sel: string | null; setSel: (id: string | null) => void; filter: string; setFilter: (f: string) => void; thumpKey: number; aiOn: boolean; h: UploadHandlers }) {
   if (!upload) {
     return (
       <div className="card empty">
@@ -316,19 +316,29 @@ export function UploadResults({ upload, sel, setSel, thumpKey, aiOn, h }: { uplo
       </>
     );
   }
-  const booked = evs.filter((x: any) => x.b._ref).length;
-  const needs = evs.filter((x: any) => !x.b._ref && x.ev.status === 'blocked').length;
-  const ready = evs.length - booked - needs;
-  const clearToBook = evs.filter((x: any) => !x.b._ref && x.ev.status === 'clear').length;
+  // Every booking is in exactly one group: booked, or by verdict (red / amber / green).
+  const group = (x: any) => (x.b._ref ? 'booked' : x.ev.status === 'blocked' ? 'red' : x.ev.status === 'warning' ? 'amber' : 'green');
+  const count = (g: string) => evs.filter((x: any) => group(x) === g).length;
+  const clearToBook = count('green');
   const anyChanges = evs.some((x: any) => hasChanges(x.b));
+  const shown = filter === 'all' ? evs : evs.filter((x: any) => group(x) === filter);
+  const tiles: [string, string, number, string][] = [
+    ['all', '', evs.length, 'all bookings'],
+    ['red', 'red', count('red'), 'red: need fixing'],
+    ['amber', 'amber', count('amber'), 'amber: ready, with warnings'],
+    ['green', 'green', count('green'), 'green: clear to book'],
+    ['booked', 'booked', count('booked'), 'booked'],
+  ];
   return (
     <div className="card section">
       <div className="row-actions"><h3 style={{ margin: 0 }}>{upload.fileName}</h3></div>
-      <div className="tiles">
-        <div className="tile"><b>{evs.length}</b><span>bookings in this file</span></div>
-        <div className="tile red"><b>{needs}</b><span>need fixing</span></div>
-        <div className="tile amber"><b>{ready}</b><span>ready to book</span></div>
-        <div className="tile green"><b>{booked}</b><span>booked</span></div>
+      <div className="tiles" role="group" aria-label="Filter bookings by status">
+        {tiles.map(([key, cls, n, label]) => (
+          <button key={key} type="button" className={'tile ' + cls + (filter === key ? ' on' : '')} aria-pressed={filter === key}
+            onClick={() => setFilter(filter === key && key !== 'all' ? 'all' : key)}>
+            <b>{n}</b><span>{label}</span>
+          </button>
+        ))}
       </div>
       <div className="row-actions" style={{ margin: '4px 0 14px' }}>
         <button className="btn" disabled={!clearToBook || h.busy} onClick={h.bookAllClear}>
@@ -343,7 +353,7 @@ export function UploadResults({ upload, sel, setSel, thumpKey, aiOn, h }: { uplo
         <table>
           <thead><tr>{['Booking', 'Seller', 'Route', 'Pallets', 'Recommended carrier', 'Status'].map((t, i) => <th key={t} className={i === 3 ? 'num' : ''}>{t}</th>)}</tr></thead>
           <tbody>
-            {evs.map(({ b, ev }: any) => {
+            {shown.map(({ b, ev }: any) => {
               const r = ev.rec, c = r.recommended;
               const go = () => { setSel(b.id); window.scrollTo({ top: 0 }); };
               return (
@@ -358,7 +368,8 @@ export function UploadResults({ upload, sel, setSel, thumpKey, aiOn, h }: { uplo
           </tbody>
         </table>
       </div>
-      <p className="note" style={{ marginTop: 10 }}>Select a booking to see what’s wrong, fix it, and book it.</p>
+      {!shown.length ? <p className="note" style={{ marginTop: 10 }}>No bookings in this group.</p> : null}
+      <p className="note" style={{ marginTop: 10 }}>{(filter === 'all' ? '' : 'Showing ' + shown.length + ' of ' + evs.length + '. ') + 'Select a booking to see what’s wrong, fix it, and book it.'}</p>
     </div>
   );
 }
