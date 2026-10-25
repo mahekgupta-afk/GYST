@@ -21,11 +21,12 @@ describe('planted-error sample bookings', () => {
   it('BK-003 R-02', () => expect(rules('BK-003')).toContain('R-02'));
   it('BK-004 R-03', () => expect(rules('BK-004')).toContain('R-03'));
   it('BK-005 R-04', () => expect(rules('BK-005')).toContain('R-04'));
-  it('BK-006 R-05 on Carrier C, recommends Carrier B', () => {
+  it('BK-006 (Fastest, 500 kg per pallet): Carrier C is ruled out for weight, Carrier B is recommended and R-05 passes', () => {
     const ev = run('BK-006');
-    expect(rules('BK-006')).toContain('R-05');
-    expect(ev.rec.selected.carrier).toBe('Carrier C');
+    expect(rules('BK-006')).not.toContain('R-05');
     expect(ev.rec.recommended.carrier).toBe('Carrier B');
+    expect(ev.rec.selected.carrier).toBe('Carrier B');
+    expect(ev.rec.ruledOutNotes.join(' ')).toMatch(/Carrier C .*ruled out/);
   });
   it('BK-007 R-05 and no carrier fits', () => {
     expect(rules('BK-007')).toContain('R-05');
@@ -39,9 +40,10 @@ describe('planted-error sample bookings', () => {
   it('BK-010 R-08 amber', () => expect(rules('BK-010')).toContain('R-08'));
   it('BK-011 R-09 amber', () => expect(rules('BK-011')).toContain('R-09'));
   it('BK-012 R-10 amber', () => expect(rules('BK-012')).toContain('R-10'));
-  it('BK-013 trips every red rule it should plus R-08, R-09, R-10', () => {
+  it('BK-013 trips every rule it should (R-05 passes: Carrier B can take the load)', () => {
     const r = rules('BK-013');
-    for (const id of ['R-01', 'R-03', 'R-04', 'R-05', 'R-06', 'R-08', 'R-09', 'R-10']) expect(r).toContain(id);
+    for (const id of ['R-01', 'R-03', 'R-04', 'R-06', 'R-08', 'R-09', 'R-10']) expect(r).toContain(id);
+    expect(r).not.toContain('R-05');
   });
   it('BK-014 negative controls pass (R-02 within 1%, olive oil, business address)', () => {
     expect(run('BK-014').status).toBe('clear');
@@ -54,9 +56,19 @@ describe('boundaries', () => {
     const b = base(); b.pallets = 1; b.grossWeight = 500;
     expect(PF.evaluate(b).issues.map((i: any) => i.rule)).not.toContain('R-05');
   });
-  it('501 kg per pallet fails on Carrier A', () => {
+  it('501 kg per pallet rules Carrier A out, but R-05 passes because Carrier B can take it', () => {
     const b = base(); b.pallets = 1; b.grossWeight = 501;
-    expect(PF.evaluate(b).issues.map((i: any) => i.rule)).toContain('R-05');
+    const ev = PF.evaluate(b);
+    expect(ev.issues.map((i: any) => i.rule)).not.toContain('R-05');
+    expect(ev.rec.recommended.carrier).toBe('Carrier B');
+  });
+  it('exactly 750 kg per pallet passes (Carrier B); 751 kg fails on every carrier', () => {
+    const b = base(); b.pallets = 1; b.grossWeight = 750;
+    expect(PF.evaluate(b).issues.map((i: any) => i.rule)).not.toContain('R-05');
+    b.grossWeight = 751;
+    const ev = PF.evaluate(b);
+    expect(ev.issues.map((i: any) => i.rule)).toContain('R-05');
+    expect(ev.rec.recommended).toBeNull();
   });
   it('today passes R-10', () => {
     const b = base(); b.readyDate = TODAY;

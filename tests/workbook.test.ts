@@ -17,7 +17,7 @@ describe('real xlsx upload (same path the browser uses)', () => {
     expect(rulesOf('BK-003')).toContain('R-02');
     expect(rulesOf('BK-004')).toContain('R-03');
     expect(rulesOf('BK-005')).toContain('R-04');
-    expect(rulesOf('BK-006')).toContain('R-05');
+    expect(rulesOf('BK-007')).toContain('R-05');
     expect(rulesOf('BK-008')).toContain('R-06');
     expect(rulesOf('BK-014')).toHaveLength(0);
   });

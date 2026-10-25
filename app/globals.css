@@ -157,7 +157,7 @@ details .inner { padding: 16px 20px; }
   .grid { grid-template-columns: 1fr; }
   .left { position: static; height: calc(100dvh - 190px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); min-height: 360px; max-height: 640px; }
   .rules { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .verdict { grid-template-columns: 1fr; }
+  .verdict { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
   .app { padding: 14px 12px 40px; }
@@ -207,5 +207,18 @@ table.edit td { vertical-align: top; }
 .changes summary { cursor: pointer; font-weight: 600; }
 .changes table { margin-top: 8px; }
 .bookerr { background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 10px 14px; margin-top: 12px; font-size: 14px; }
-fieldset.lock { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 16px; }
+fieldset.lock { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+fieldset.lock > * { min-width: 0; }
 fieldset.lock:disabled .fixbox { display: none; }
+
+.ruledout { background: var(--paper2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin: 10px 0; font-size: 14px; color: var(--ink2); }
+.ruledout b { display: block; font: 700 12px var(--display); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 4px; }
+.ruledout p { margin: 4px 0; }
+.acks { margin-top: 12px; display: grid; gap: 6px; }
+.ack { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; cursor: pointer; }
+.ack input { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+
+ol.how { margin: 0 0 8px; padding-left: 20px; display: grid; gap: 6px; font-size: 15px; }
+
+.stamp { justify-self: start; max-width: 100%; }
+.verdict > * { min-width: 0; }

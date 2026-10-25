@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { PF, C } from '@/lib/pf';
 import { Detail, SheetCard, UploadResults, plural, type UploadHandlers } from './Results';
-import { applyChange, resetBooking, correctedRows, type Spec } from '@/lib/fixes';
+import { applyChange, resetBooking, correctedRows, unacknowledged, issueKey, type Spec } from '@/lib/fixes';
 import { bookShipment } from '@/lib/bookingClient';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
@@ -21,6 +21,7 @@ export default function App() {
   const [thumpKey, setThumpKey] = useState(0);
   const [today, setToday] = useState('');
   const [uploadMsg, setUploadMsg] = useState('');
+  const [saveNote, setSaveNote] = useState('');
   const [drag, setDrag] = useState(false);
   const [input, setInput] = useState('');
 
@@ -64,18 +65,25 @@ export default function App() {
   function compose(log: any, snap: any): { text: string; chips: string[] | null } {
     const c = chat.current, a = c.asked;
     const ack = C.ackText(log);
+    const dp = log.dateProblem;
+    const dateText = dp ? (dp.invalid ? '“' + dp.invalid + '” isn’t a real date. ' : '“' + dp.ambiguous + '” isn’t an exact date, so I haven’t saved one. ') + 'Please give me the day, for example 05-11-2026 or 5 Nov.' : '';
+    const extra = [(log.scope || []).join('\n'), dateText].filter(Boolean).join('\n');
+    const askAgain = a && !(dp && a.key === 'readyDate');
     if (!log.understood) {
-      if (log.unsupported) return { text: 'I can’t book that: ' + log.unsupported + '. ' + (a ? a.q : ''), chips: a ? a.chips : null };
-      return { text: 'Sorry, I didn’t catch that. ' + (a ? (a.hint || '') + a.q : 'You can say things like “add a pallet”, “change the priority to Fastest”, “use Carrier B” or “confirm”.'), chips: a ? a.chips : completeChips(null) };
+      if (extra) return { text: extra + (askAgain ? '\n' + a.q : ''), chips: a && askAgain ? a.chips : null };
+      return { text: 'Sorry, I didn’t catch that. ' + (a ? (a.hint || '') + a.q : 'You can say things like “add a pallet”, “change the priority to Fastest”, “use Carrier B” or “book it”.'), chips: a ? a.chips : completeChips(null) };
     }
     let head = ack || (a ? '' : 'Noted.');
-    if (log.unsupported) head += '\nI can’t book “' + log.unsupported + '”. I only handle the cities listed above.';
+    if (extra) head = (head ? head + '\n' : '') + extra;
+    if (a && !askAgain) return { text: head, chips: null };
     if (a) return { text: (head ? head + '\n' : '') + a.q, chips: a.chips };
     const b = c.b;
     if (JSON.stringify(Object.assign({}, snap.b, { _confirmed: undefined })) !== sig(c)) b._confirmed = false;
     const ev = PF.evaluate(b);
     if (log.intent === 'confirm') {
-      if (ev.status === 'blocked') return { text: 'I can’t confirm yet: ' + plural(ev.counts.red, 'red problem') + ' still need fixing. ' + ev.issues.filter((i: any) => i.sev === 'red').slice(0, 4).map((i: any) => i.title).join('; ') + '.', chips: completeChips(ev) };
+      if (ev.status === 'blocked') return { text: 'I can’t book this yet: ' + plural(ev.counts.red, 'red problem') + ' still need fixing. ' + ev.issues.filter((i: any) => i.sev === 'red').slice(0, 4).map((i: any) => i.title).join('; ') + '.', chips: completeChips(ev) };
+      const open = unacknowledged(b, ev);
+      if (open.length) return { text: 'I can book this once you’ve acknowledged ' + (open.length === 1 ? 'the warning' : 'the ' + open.length + ' warnings') + ': ' + open.slice(0, 4).map((i: any) => i.title).join('; ') + '. Tick “I understand” in the Book this shipment panel, or say “I acknowledge the warnings”.', chips: ['I acknowledge the warnings'] };
       pendingBook.current = true; prev.current = { red: ev.counts.red, amber: ev.counts.amber };
       return { text: 'Booking it with ' + ev.rec.selected.carrier + '…', chips: null };
     }
@@ -98,7 +106,11 @@ export default function App() {
 
   /** Ask Gemini (via our server route) to read the message. Returns null on any failure. */
   async function readWithAI(c0: any, text: string, askQ: string | null) {
-    const res = await fetch('/api/parse-message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ booking: c0.b, text, askText: askQ }) });
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 14000);   // never leave the chat hanging on "Reading your message…"
+    let res: Response;
+    try { res = await fetch('/api/parse-message', { method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ booking: c0.b, text, askText: askQ }) }); }
+    finally { clearTimeout(timer); }
     if (!res.ok) { const e: any = new Error('ai'); e.status = res.status; throw e; }
     const { result } = await res.json();
     return C.aiToEx(result, c0);
@@ -114,7 +126,17 @@ export default function App() {
       say('bot', 'This booking is already booked under reference ' + chat.current.b._ref + ' and can’t be changed here. Say “start over” to make a new booking.', ['Start a new booking']);
       return;
     }
+    const cur = chat.current;
+    if (C.isComplete(cur) && /acknowledg|\bi\s+(?:understand|accept)\b.*warning/i.test(text)) {
+      const evA = PF.evaluate(cur.b);
+      const keys = evA.issues.filter((i: any) => i.sev === 'amber').map(issueKey);
+      cur.b._acks = Array.from(new Set([...(cur.b._acks || []), ...keys]));
+      say('bot', keys.length ? 'Noted. You’ve acknowledged ' + plural(keys.length, 'warning') + '. Say “book it” when you’re ready.' : 'There are no warnings to acknowledge.', evA.status === 'blocked' ? completeChips(evA) : ['Book it']);
+      bump();
+      return;
+    }
     setBusy(true);
+    let aiFailed = false;
     const c0 = chat.current, snap = C.cloneChat(c0);
     const askQ = c0.asked ? c0.asked.q : null;
     let log: any = null;
@@ -130,11 +152,17 @@ export default function App() {
         popMsg();
         chat.current = C.cloneChat(snap);
         log = null;
+        aiFailed = true;
         if (e && e.status === 503) setAiOn(false);
       }
     }
     if (!log) log = C.step(chat.current, text, {});
     setBusy(false);
+    if (aiFailed && !log.understood && !log.reset) {
+      say('bot', 'I couldn’t read that just now. Your booking so far is kept, so please try again or say it another way.', chat.current.asked ? chat.current.asked.chips : null);
+      bump();
+      return;
+    }
     if (log.reset) { greet(); return; }
     const reply = compose(log, snap);
     say('bot', reply.text, reply.chips);
@@ -165,11 +193,13 @@ export default function App() {
     prev.current = { red: ev.counts.red, amber: ev.counts.amber };
     thump(); bump();
   };
+  const ackChat = (keys: string[]) => { chat.current.b._acks = keys; bump(); };
   const resetChat = () => { resetBooking(chat.current.b); say('bot', 'Everything is back to the details you gave me.', completeChips(PF.evaluate(chat.current.b))); thump(); bump(); };
 
   const uploadHandlers: UploadHandlers = {
     fix: (b, spec) => { applyChange(b, spec); thump(); bump(); },
     reset: b => { resetBooking(b); thump(); bump(); },
+    ack: (b, keys) => { b._acks = keys; bump(); },
     book: b => { void bookOne(b, 'upload', upload?.fileName); },
     bookAllClear: async () => {
       const todo = (upload?.bookings || []).filter((b: any) => !b._ref && PF.evaluate(b).status === 'clear');
@@ -195,6 +225,8 @@ export default function App() {
   const showUpload = (u: any) => { setUpload(u); setSelState(null); setFilter('all'); thump(); setMode('upload'); };
   async function handleFile(file: File) {
     setUploadMsg('Reading ' + file.name + '…');
+    setSaveNote('');
+    if (file.size === 0) { showUpload({ error: 'That file is empty. Please choose a file with a Bookings sheet and an Items sheet.', fileName: file.name }); setUploadMsg(''); return; }
     try {
       const mod: any = await import('xlsx');
       const res = PF.parseWorkbook(mod.default ?? mod, await file.arrayBuffer());
@@ -207,11 +239,16 @@ export default function App() {
     } catch (e: any) { showUpload({ error: (e && e.message) || 'Something went wrong reading that file.', fileName: file.name }); }
     setUploadMsg('');
   }
-  /** Fire-and-forget: store the original file in Neon. The user already has their results, so failures are silent. */
-  function saveUpload(file: File) {
+  /** Stores a copy of the file. Never blocks checking: the results are already on screen, and any problem here is a small note. */
+  async function saveUpload(file: File) {
+    setSaveNote('');
+    if (file.size > 4 * 1024 * 1024) { setSaveNote('Your file has been checked. It is over 4 MB, so a copy was not saved.'); return; }
     const form = new FormData();
     form.append('file', file);
-    fetch('/api/uploads', { method: 'POST', body: form }).catch(() => {});
+    try {
+      const r = await fetch('/api/uploads', { method: 'POST', body: form });
+      if (!r.ok && r.status !== 503 && r.status !== 422) setSaveNote('Your file has been checked, but a copy could not be saved.');
+    } catch { setSaveNote('Your file has been checked, but a copy could not be saved.'); }
   }
   /** Blank workbook in the template format, so users can see the expected sheets and columns. */
   async function downloadTemplate() {
@@ -273,7 +310,8 @@ export default function App() {
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
               </div>
               <button className="linkbtn" onClick={downloadTemplate}>Download the blank template (.xlsx)</button>
-              <p className="note">Uploaded files are stored securely so we can review how your sheets were checked.</p>
+              <p className="note">Uploaded files are stored so we can review how your sheets were checked.</p>
+              {saveNote ? <p className="note" role="status">{saveNote}</p> : null}
               <div className="note" role="status">{uploadMsg}</div>
             </div>
           </div>
@@ -287,7 +325,7 @@ export default function App() {
                 <div className="card section"><h3>Pre-flight checks</h3><p className="muted">The ten rulebook checks and the carrier recommendation appear here as soon as the details are complete. Nothing is guessed: anything I’m unsure of, I’ll ask.</p></div>
               </>
             ) : (
-              <Detail b={b} aiOn={aiOn} thumpKey={thumpKey} opts={{ fix: fixChat, book: () => { void bookChat(); }, reset: resetChat, booking: bookBusy }} />
+              <Detail b={b} aiOn={aiOn} thumpKey={thumpKey} opts={{ fix: fixChat, book: () => { void bookChat(); }, reset: resetChat, booking: bookBusy, ack: ackChat }} />
             )
           ) : (
             <UploadResults upload={upload} sel={sel} setSel={setSel} filter={filter} setFilter={setFilter} thumpKey={thumpKey} aiOn={aiOn} h={uploadHandlers} />
@@ -302,6 +340,14 @@ export default function App() {
             <thead><tr><th>Rule</th><th>Check</th><th>If broken</th></tr></thead>
             <tbody>{PF.RULES.map((x: any) => <tr key={x.id}><td><b>{x.id}</b></td><td>{x.text}</td><td><span className={'pill ' + x.sev}>{x.sev === 'red' ? 'Red' : 'Amber'}</span></td></tr>)}</tbody>
           </table></div>
+          <p style={{ margin: '16px 0 8px' }}><b>How the carrier is chosen</b></p>
+          <ol className="how">
+            <li>Weight per pallet is gross weight ÷ pallets. Any carrier whose limit is at least that (exactly equal passes) can take the load.</li>
+            <li>Among those carriers: <b>Cheapest</b> takes the lowest total price, <b>Fastest</b> the fewest days, <b>Most reliable</b> the highest on-time rate.</li>
+            <li><b>Balanced</b> scores each carrier from 0 to 1 on price, transit days and on-time rate, comparing only the carriers that can take the load (lower price and fewer days score higher, higher on-time scores higher). The three scores are averaged with equal weight, one third each, and the highest average wins.</li>
+            <li>Ties go to the lower price, then fewer days, then the earlier carrier letter.</li>
+            <li>R-05 is checked against the carrier in use. It passes when the recommended carrier can take the load, and is Red only when no carrier can (or a carrier you picked can’t).</li>
+          </ol>
           <p style={{ margin: '16px 0 8px' }}><b>Carrier rate card (fixed)</b></p>
           <div className="scroll"><table>
             <thead><tr><th>Carrier</th><th>Service</th><th>To</th><th className="num">£ per pallet</th><th className="num">Days</th><th className="num">On time</th><th className="num">Max kg per pallet</th></tr></thead>

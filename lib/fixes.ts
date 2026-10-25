@@ -25,7 +25,16 @@ const LABEL: Record<string, string> = {
   hs: 'HS code', qty: 'Quantity (units)', price: 'Unit price (£)', upc: 'Units per carton', unitWeight: 'Unit weight (kg)', coo: 'Country of origin', desc: 'Description',
 };
 
-const strip = (b: any) => JSON.parse(JSON.stringify(b, (k, v) => (k.startsWith('_') ? undefined : v)));
+// Transient UI state is left out of the snapshot; data that came from the file (_row, _uid, _dup*) and the carrier choice are kept.
+const TRANSIENT = new Set(['_orig', '_changes', '_confirmed', '_ref', '_saved', '_bookError', '_edited', '_acks']);
+const strip = (b: any) => JSON.parse(JSON.stringify(b, (k, v) => (TRANSIENT.has(k) ? undefined : v)));
+
+/** Stable id for an issue, used to record which warnings the seller acknowledged. */
+export const issueKey = (i: { rule: string; item?: string | null; title: string }) => [i.rule, i.item || '', i.title].join('|');
+/** Amber warnings that have not been acknowledged yet. */
+export const unacknowledged = (b: any, ev: any): any[] => ev.issues.filter((i: any) => i.sev === 'amber' && !(b._acks || []).includes(issueKey(i)));
+/** Booking is allowed when nothing is red and every amber warning has been acknowledged. */
+export const canBook = (b: any, ev: any) => ev.status !== 'blocked' && unacknowledged(b, ev).length === 0;
 const itemName = (it: any) => it.sku || it.desc || 'item';
 const show = (v: unknown) => (v === null || v === undefined || v === '' ? '(blank)' : v);
 

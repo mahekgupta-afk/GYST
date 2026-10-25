@@ -3,6 +3,8 @@
 /* Preflight chat: slot-filling conversation with a built-in parser (works with no AI),
    plus helpers to merge an AI-extracted booking when Claude is available. */
 import * as PF from '../engine/engine';
+import { parseDateText, DATE_CUE } from './dates';
+import { checkScope } from './scope';
 const { ORIGINS, DESTS, COUNTRIES, PRIORITIES, gbp, nf, dmy, niceDate } = PF;
 
 const WORD = "(?:(?!(?:at|@|for|in|with|packed|priced|each|from|made|to|and|per|every|are|is|of|on|by|please)\\b)[A-Za-z][A-Za-z0-9'\\-]*)";
@@ -55,32 +57,7 @@ function cooOf(t) {
   return undefined;
 }
 const SKIP = /^\s*(skip|unknown|n\/?a|none|not sure|no idea|later|don'?t know|do not know|dunno|i don'?t know.*|not known|no)\s*[.!]?\s*$/i;
-function dateOf(t, today) {
-  let m = /\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})\b/.exec(t);
-  if (m) return PF.ymd(+m[3], +m[2], +m[1]) || undefined;
-  const yr = +today.slice(0, 4);
-  const mon = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
-  m = new RegExp('\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?' + mon + '\\.?(?:,?\\s*(\\d{4}))?\\b', 'i').exec(t);
-  if (m) return PF.ymd(m[3] ? +m[3] : yr, MONTHS[m[2].toLowerCase().slice(0, 4) === 'sept' ? 'sept' : m[2].toLowerCase().slice(0, 3)], +m[1]) || undefined;
-  m = new RegExp('\\b' + mon + '\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?\\b', 'i').exec(t);
-  if (m) return PF.ymd(m[3] ? +m[3] : yr, MONTHS[m[1].toLowerCase().slice(0, 4) === 'sept' ? 'sept' : m[1].toLowerCase().slice(0, 3)], +m[2]) || undefined;
-  const wd = /\b(?:(?:next|this|on|by)\s+)?(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*day\b/i.exec(t);
-  if (wd) {
-    const idx = { sun: 0, mon: 1, tue: 2, tues: 2, wed: 3, thu: 4, thur: 4, thurs: 4, fri: 5, sat: 6 }[wd[1].toLowerCase()];
-    const [yy, mm, dd] = today.split('-').map(Number);
-    const cur = new Date(Date.UTC(yy, mm - 1, dd)).getUTCDay();
-    let add = (idx - cur + 7) % 7; if (add === 0) add = 7;
-    return PF.addDays(today, add);
-  }
-  if (/\byesterday\b/i.test(t)) return PF.addDays(today, -1);
-  if (/\btoday\b/i.test(t)) return today;
-  if (/\btomorrow\b/i.test(t)) return PF.addDays(today, 1);
-  m = /\bin\s+(\d+|a|one|two|three|four|five|six|seven)\s+days?\b/i.exec(t);
-  if (m) return PF.addDays(today, NUMW[m[1].toLowerCase()] || +m[1]);
-  if (/\bnext\s+week\b/i.test(t)) return PF.addDays(today, 7);
-  if (/\blast\s+week\b/i.test(t)) return PF.addDays(today, -7);
-  return undefined;
-}
+function dateOf(t, today) { return parseDateText(t, today).iso; }
 function cityOf(t) {
   const out = {};
   ORIGINS.forEach(c => { if (new RegExp('\\b' + c + '\\b', 'i').test(t)) out.originCity = c; });
@@ -206,8 +183,8 @@ function extractAll(text, c, askKey, today) {
   const pr = priorityOf(orig, strongOnly); if (pr) ex.b.priority = pr;
 
   // date
-  const dtx = dateOf(orig, today);
-  if (dtx && (askKey === 'readyDate' || /\d{4}|ready|collect|pick|ship|send|dispatch|pack|date|on\b|by\b|tomorrow|today|yesterday|next week|last week|in \d+ days/i.test(orig))) {
+  const dtx = parseDateText(orig, today).iso;
+  if (dtx && (askKey === 'readyDate' || askKey === 'basics' || DATE_CUE.test(orig))) {
     ex.b.readyDate = dtx;
     take(/\b\d{1,2}[-\/.]\d{1,2}[-\/.]\d{4}\b/);
     take(/\b\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:,?\s*\d{4})?\b/i);
@@ -258,7 +235,7 @@ function extractAll(text, c, askKey, today) {
   if (wantItem) {
     const q1 = take(/(?:quantity|qty)\s*(?:is|of|:|=)?\s*(\d[\d,]*)/i);
     if (q1) ex.item.qty = N(q1);
-    const re = new RegExp("(?<![\\d.£\\-/])(\\d[\\d,]{0,8})\\s*(?:x\\s+|units?\\s+of\\s+|pcs\\s+of\\s+|pieces?\\s+of\\s+|of\\s+)?" + WORDS, 'i');
+    const re = new RegExp("(?:^|[^\\d.£\\-/])(\\d[\\d,]{0,8})\\s*(?:x\\s+|units?\\s+of\\s+|pcs\\s+of\\s+|pieces?\\s+of\\s+|of\\s+)?" + WORDS, 'i');
     const m = re.exec(t);
     if (m && !/^(?:units?|pcs|pieces?|items?|gbp|pounds|per|kg|kgs)$/i.test(m[2].split(/\s+/)[0])) {
       if (ex.item.qty == null) ex.item.qty = N(m[1]);
@@ -275,7 +252,9 @@ function extractAll(text, c, askKey, today) {
       if (bare && bare.split(' ').length <= 8 && !/^(?:yes|no|ok)$/i.test(bare)) ex.item.desc = bare;
     }
   }
-  const sk = /\bsku\s*[:#]?\s*([A-Za-z0-9\-_]{3,})/i.exec(orig); if (sk) ex.item.sku = sk[1].toUpperCase();
+  // A SKU is only ever one the seller typed. "no SKU yet" and similar are not SKUs.
+  const sk = /\b(?:sku|item\s*code|product\s*code|part\s*(?:no\.?|number))\s*(?:is|=|:|#)?\s*"?([A-Za-z0-9][A-Za-z0-9._\/-]*)"?/i.exec(orig);
+  if (sk && !/^(yet|none|na|n|unknown|tbc|tbd|not|no|nothing|skip|dont|don|number|code|is|a|the|for|and)$/i.test(sk[1])) ex.item.sku = sk[1];
   Object.keys(ex.item).forEach(k => { if (ex.item[k] == null || (typeof ex.item[k] === 'number' && isNaN(ex.item[k]))) delete ex.item[k]; });
   return finish(ex);
 }
@@ -319,11 +298,31 @@ function autoFill(c, notes) {
       if (b.items.length === 1 && b.cartons != null) { it.cartons = b.cartons; notes.push('I used your ' + b.cartons + ' total cartons for the ' + (it.desc || 'product').toLowerCase() + ', as it’s the only product.'); }
       else if (it.upc > 0 && it.qty % it.upc === 0) { it.cartons = it.qty / it.upc; notes.push(it.qty + ' units at ' + it.upc + ' per carton is ' + it.cartons + ' cartons, so I filled that in.'); }
     }
-    if (!it.sku && it.desc) it.sku = (it.desc.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase() || 'ITEM') + '-0' + b.items.length;
   }
 }
 function nextAsk(c) {
   const b = c.b;
+  // Several booking details missing: ask for all of them in one message instead of one per turn.
+  const basics = [];
+  if (!b.seller) basics.push('seller');
+  if (!b.originCity || !b.destCity) basics.push('route');
+  if (!b.destType) basics.push('destType');
+  if (b.destType === 'Warehouse' && b.appointment == null) basics.push('appointment');
+  if (!b.readyDate) basics.push('readyDate');
+  if (!b.priority) basics.push('priority');
+  if (basics.length >= 2) {
+    const label = {
+      seller: 'your business name',
+      route: !b.originCity && !b.destCity ? 'where it’s collected from and where it’s going' : !b.originCity ? 'the UK city it’s collected from' : 'the city it’s going to' + (b.destCountry ? ' in ' + b.destCountry : ''),
+      destType: 'whether it’s going to a warehouse or a business address',
+      appointment: 'whether a delivery appointment is booked at the warehouse',
+      readyDate: 'the date it’s ready for collection (DD-MM-YYYY)',
+      priority: 'what matters most: cheapest, fastest, most reliable or balanced'
+    };
+    const parts = basics.map(k => label[k]);
+    const list = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+    return { key: 'basics', missing: basics, q: 'I still need ' + list + '. You can answer in one message, for example “Acme Ltd, Leeds to Paris, warehouse, appointment booked, ready 5 Nov, cheapest”.', hint: 'I collect from London, Manchester, Birmingham or Leeds, and deliver to Berlin, Frankfurt, Hamburg, Paris, Lyon, Amsterdam or Rotterdam. ' };
+  }
   if (!b.seller) return { key: 'seller', q: 'What’s your business name?' };
   if (!b.originCity && !b.destCity) return { key: 'route', hint: 'I can only book from London, Manchester, Birmingham or Leeds to Berlin, Frankfurt, Hamburg, Paris, Lyon, Amsterdam or Rotterdam. ', q: 'Where is it collected from, and where is it going? I can book from London, Manchester, Birmingham or Leeds to Germany, France or the Netherlands.' + (b.destCountry ? ' (I have the destination country as ' + b.destCountry + '.)' : '') };
   if (!b.originCity) return { key: 'originCity', hint: 'I can only collect from London, Manchester, Birmingham or Leeds. ', q: 'Which UK city is it collected from? London, Manchester, Birmingham or Leeds.', chips: ORIGINS };
@@ -345,6 +344,17 @@ function nextAsk(c) {
         if (it.desc && it.qty == null) return { key: need, itemIdx: i, q: 'How many units of ' + itemName(it) + ' are you sending?' };
         if (!it.desc && it.qty != null) return { key: need, itemIdx: i, q: 'What are the ' + it.qty.toLocaleString('en-GB') + ' units? A short description is fine.' };
         return { key: need, itemIdx: i, q: first ? 'What are you shipping, and how many units? For example “1,080 ceramic mugs”.' : 'What’s the next product, and how many units?' };
+      }
+      // Three or more product details missing: ask for them together.
+      const lack = [];
+      if (it.price == null) lack.push('price per unit (£)');
+      if (it.upc == null) lack.push('units per carton');
+      if (it.unitWeight == null) lack.push('weight of one unit (kg)');
+      if (it.hs == null && !it.skipHS) lack.push('HS code');
+      if (!it.coo && !it.skipCOO) lack.push('country of origin');
+      if (lack.length >= 3 && it.desc && it.qty != null) {
+        const list = lack.slice(0, -1).join(', ') + ' and ' + lack[lack.length - 1];
+        return { key: 'item.details', itemIdx: i, q: 'For ' + itemName(it) + ' I still need the ' + list + '. For example “£5 each, 12 per carton, 0.5 kg each, HS 691200, made in UK”.', hint: 'Give each with its unit, like “£5 each”, “12 per carton”, “0.5 kg each”. ', chips: ['I don’t know the HS code or country'] };
       }
       if (need === 'item.price') return { key: need, itemIdx: i, q: 'What’s the price per unit of ' + itemName(it) + ', in £?' };
       if (need === 'item.upc') return { key: need, itemIdx: i, q: 'How many units go in each carton?' };
@@ -433,6 +443,22 @@ function applyEx(c, ex, log) {
 }
 
 /* ---------- one conversational turn (built-in understanding) ---------- */
+/* Keep unsupported places and non-GBP amounts out of the booking, and recover safe misspellings. */
+function applyScope(ex, sc) {
+  if (sc.blockDest) { delete ex.b.destCity; delete ex.b.destCountry; }
+  if (sc.blockOrigin) delete ex.b.originCity;
+  if (sc.badCurrency) {
+    delete ex.b.declaredValue; if (ex.item) delete ex.item.price;
+    (ex.items || []).forEach(i => { i.price = null; });
+  }
+  if (sc.resolved.destCity && !sc.blockDest && !ex.b.destCity) { ex.b.destCity = sc.resolved.destCity; ex.b.destCountry = PF.DESTS[sc.resolved.destCity]; }
+  if (sc.resolved.originCity && !sc.blockOrigin && !ex.b.originCity) ex.b.originCity = sc.resolved.originCity;
+}
+function dateProblemOf(text, today, ask, ex) {
+  const dp = parseDateText(text, today);
+  const cue = (ask && (ask.key === 'readyDate' || ask.key === 'basics')) || DATE_CUE.test(text);
+  return !dp.iso && cue && (dp.ambiguous || dp.invalid) && !(ex.b && ex.b.readyDate) ? dp : null;
+}
 function step(c, text, opts) {
   opts = opts || {};
   text = String(text).replace(/[\u2018\u2019]/g, "'");
@@ -443,6 +469,10 @@ function step(c, text, opts) {
   const all = extractAll(text, c, askKey, today);
   if (all.intent === 'reset') { log.reset = true; return log; }
   const ex = mergeEx(answerFor(ask, text, c, today), all);
+  const sc = checkScope(text);
+  applyScope(ex, sc);
+  log.scope = sc.messages;
+  log.dateProblem = dateProblemOf(text, today, ask, ex);
   if (ex.intent) log.intent = ex.intent;
   const before = JSON.stringify(c.b) + '|' + c.itemsDone + '|' + c.wantMore;
   const hadHS = c.b.items.length ? c.b.items[c.b.items.length - 1].skipHS : false;
@@ -455,6 +485,7 @@ function step(c, text, opts) {
     if (/another|one more|add\s+(?:a|another|more)|^\s*(?:yes|yeah|yep|yup|sure)/i.test(text)) { c.wantMore = true; c.itemsDone = false; log.notes.push('Sure, let’s add another product.'); }
     else if (/everything|that'?s\s+(?:all|it)|nothing\s+else|^\s*(?:no|nope|nah|done|none|all)\b/i.test(text)) { c.itemsDone = true; }
   }
+  if (/(?:^|\b)(?:roughly|approx(?:imately)?|about|around|circa|c\.)\s*[£]?\s*\d|~\s*\d/i.test(text) && (log.set.length || log.changed.length)) log.notes.push('You said “roughly”, so I’ve used that figure exactly as given. If you have the exact number, tell me, because the checks use it as written.');
   autoFill(c, log.notes);
   c.started = true;
   c.asked = nextAsk(c);
@@ -499,6 +530,34 @@ function answerFor(ask, text, c, today) {
       if (SKIP.test(t) || /not sure|don'?t know/i.test(t)) { ex.flags.skipCOO = true; break; }
       const v = cooOf(t); if (v) ex.item.coo = v;
       ex.itemTarget = I; break;
+    }
+    case 'basics': {
+      // Split a free-text answer into pieces and place each one by what it is.
+      const segs = t.split(/[,;\n]|\band\b/i).map(x => x.trim()).filter(Boolean);
+      const left = [];
+      segs.forEach(sg => {
+        let used = false;
+        const dt = destTypeOf(sg); if (dt && c.b.destType == null) { ex.b.destType = dt; used = true; }
+        const dv = dateOf(sg, today); if (dv && !c.b.readyDate) { ex.b.readyDate = dv; used = true; }
+        const pr = priorityOf(sg); if (pr && c.b.priority == null && !dv) { ex.b.priority = pr; used = true; }
+        const cc = cityOf(sg);
+        if (cc.originCity && !c.b.originCity) { ex.b.originCity = cc.originCity; used = true; }
+        if (cc.destCity && !c.b.destCity) { ex.b.destCity = cc.destCity; ex.b.destCountry = DESTS[cc.destCity]; used = true; }
+        else if (cc.destCountry && !c.b.destCountry) { ex.b.destCountry = cc.destCountry; used = true; }
+        if (ask.missing.indexOf('appointment') >= 0 && (/appointment|slot/i.test(sg) || /^(?:yes|no|yeah|yep|nope)\b/i.test(sg))) { const yn = yesNo(sg); if (yn) { ex.b.appointment = yn; used = true; } }
+        if (!used) left.push(sg);
+      });
+      if (ask.missing.indexOf('seller') >= 0) {
+        const name = left.find(x => !/\d/.test(x) && x.split(/\s+/).length <= 6 && !yesNo(x) && !/\b(?:warehouse|business|address|appointment|collect|deliver|ready|ship|pallets?|cartons?|from|to)\b/i.test(x));
+        if (name) ex.b.seller = name.replace(/^(?:hi|hello)[\s,]*/i, '').replace(/^(?:it'?s|its|we(?:'| a)re|i(?:'| a)m|this is|my (?:company|business) is|called|named)\s+/i, '').trim() || undefined;
+        if (!ex.b.seller) delete ex.b.seller;
+      }
+      break;
+    }
+    case 'item.details': {
+      if (/don'?t know|not sure|unknown/i.test(t) && /hs|code|country|origin/i.test(t) || /don'?t know the hs code or country/i.test(t)) { ex.flags.skipHS = true; ex.flags.skipCOO = true; }
+      ex.itemTarget = I;
+      break;
     }
     case 'totals': {
       const v = firstNumber(t);
@@ -574,7 +633,7 @@ function aiPrompt(c, text, askText) {
     askText ? 'The assistant just asked the seller: “' + askText + '”. A short reply (like “3”, “yes”, “Fastest”) answers that question.' : 'This is the seller’s first message.',
     'The seller’s new message: “' + text + '”',
     'Return the complete updated booking using exactly this shape:',
-    '{"seller":str|null,"originCity":str|null,"destCity":str|null,"destCountry":str|null,"destType":"Warehouse"|"Business address"|null,"readyDate":"DD-MM-YYYY"|null,"priority":"Cheapest"|"Fastest"|"Most reliable"|"Balanced"|null,"pallets":num|null,"cartons":num|null,"declaredValue":num|null,"grossWeight":num|null,"appointment":"Yes"|"No"|null,"itemsDone":bool,"unsupported":str|null,"items":[{"sku":str|null,"desc":str|null,"hs":str|null,"qty":num|null,"price":num|null,"upc":num|null,"cartons":num|null,"unitWeight":num|null,"coo":str|null,"skipHS":bool,"skipCOO":bool}]}',
+    '{"seller":str|null,"originCity":str|null,"destCity":str|null,"destCountry":str|null,"destType":"Warehouse"|"Business address"|null,"readyDate":null,"priority":"Cheapest"|"Fastest"|"Most reliable"|"Balanced"|null,"pallets":num|null,"cartons":num|null,"declaredValue":num|null,"grossWeight":num|null,"appointment":"Yes"|"No"|null,"itemsDone":bool,"unsupported":str|null,"items":[{"sku":str|null,"desc":str|null,"hs":str|null,"qty":num|null,"price":num|null,"upc":num|null,"cartons":num|null,"unitWeight":num|null,"coo":str|null,"skipHS":bool,"skipCOO":bool}]}',
     'Rules:',
     '- Keep everything already known unless the seller changes it. Never invent values; use null when not stated.',
     '- originCity must be one of London, Manchester, Birmingham, Leeds. destCity one of Berlin, Frankfurt, Hamburg (Germany), Paris, Lyon (France), Amsterdam, Rotterdam (Netherlands). If the seller names a place outside these lists, set that field null and describe it in "unsupported".',
@@ -583,7 +642,7 @@ function aiPrompt(c, text, askText) {
     '- Total cartons/pallets/weight/value for the whole booking go in the top-level fields; per-product figures go inside items. Units per carton is "upc".',
     '- “pounds”, “quid”, “GBP” and “£” always mean money, never weight. Weight is only ever in kg, g, “kilos” or “grams”. “5 pounds each” or “£5 each” is a unit price of 5 (items[].price), not a weight. “0.5kg each” is unitWeight; the weight of the whole shipment goes in grossWeight.',
     '- Worked example: “1,000 mugs, 5 pounds each, 12 per carton, 0.5kg each” gives items[0] = {"desc":"mugs","qty":1000,"price":5,"upc":12,"unitWeight":0.5} and grossWeight stays null.',
-    '- Money is GBP; return plain numbers. Dates are DD-MM-YYYY (today is ' + PF.dmy(PF.todayISO()) + ').',
+    '- Always return readyDate as null: dates are resolved by other code, never by you. Return sku only if the seller typed one, otherwise null. Never invent a SKU.\n- Money is GBP; return plain numbers. Dates are DD-MM-YYYY (today is ' + PF.dmy(PF.todayISO()) + ').',
     '- Do not do arithmetic to fill in totals the seller did not state. Do not correct mistakes in the seller’s numbers; record what they said.',
     '- If they say they don’t know a product’s HS code set skipHS true; same for country of origin and skipCOO.',
     '- Set itemsDone true only if the seller says there are no more products.',
@@ -607,7 +666,7 @@ function aiToEx(o, c) {
   const dc = Object.keys(DESTS).find(x => str(o.destCity) && x.toLowerCase() === o.destCity.toLowerCase()); if (dc) { ex.b.destCity = dc; ex.b.destCountry = DESTS[dc]; }
   else if (str(o.destCountry)) { const k = ['Germany', 'France', 'Netherlands'].find(x => x.toLowerCase() === o.destCountry.toLowerCase()); if (k) ex.b.destCountry = k; }
   if (o.destType === 'Warehouse' || o.destType === 'Business address') ex.b.destType = o.destType;
-  const d = PF.parseDate(o.readyDate); if (d) ex.b.readyDate = d;
+  // The ready date is never taken from the model: it is resolved from the text by parseDateText.
   if (PRIORITIES.indexOf(o.priority) >= 0) ex.b.priority = o.priority;
   ['pallets', 'cartons', 'declaredValue', 'grossWeight'].forEach(k => { const v = nm(o[k]); if (v !== undefined && v >= 0) ex.b[k] = v; });
   if (o.appointment === 'Yes' || o.appointment === 'No') ex.b.appointment = o.appointment;
@@ -648,6 +707,18 @@ function stepAI(c, text, ex, opts) {
   const log = { set: [], changed: [], notes: [], understood: false, intent: null, reset: false, unsupported: ex.unsupported || null };
   const before = JSON.stringify(c.b) + c.itemsDone;
   const ask = c.asked;
+  const today = opts.todayISO || PF.todayISO();
+  // Dates, scope and SKUs are decided by deterministic code. Whatever the model said about them is checked or dropped here.
+  const dp = parseDateText(text, today);
+  if (dp.iso && ((ask && (ask.key === 'readyDate' || ask.key === 'basics')) || DATE_CUE.test(text))) ex.b.readyDate = dp.iso; else delete ex.b.readyDate;
+  const sc = checkScope(text);
+  applyScope(ex, sc);
+  log.scope = sc.messages;
+  log.dateProblem = dateProblemOf(text, today, ask, ex);
+  (ex.items || []).forEach((it, idx) => {
+    const known = c.b.items[idx];
+    if (it.sku && !(known && known.sku === it.sku) && text.toLowerCase().indexOf(String(it.sku).toLowerCase()) < 0) it.sku = null;
+  });
   if (/^\s*(start over|new booking|reset)\b/i.test(text)) { log.reset = true; return log; }
   const cm = /\b(?:use|switch to|choose|pick|go with|select|take)\s+carrier\s+([abc])\b/i.exec(text);
   if (cm) { c.b._carrier = 'Carrier ' + cm[1].toUpperCase(); log.set.push({ field: 'carrier', label: 'carrier', to: c.b._carrier, item: null }); }
@@ -657,6 +728,7 @@ function stepAI(c, text, ex, opts) {
     if (/another|one more|^\s*(?:yes|yeah|yep|add)/i.test(text)) { c.wantMore = true; c.itemsDone = false; log.understood = true; }
     else if (/everything|that'?s (?:all|it)|nothing else|^\s*(?:no|nope|done)/i.test(text)) { c.itemsDone = true; log.understood = true; }
   }
+  if (/(?:^|\b)(?:roughly|approx(?:imately)?|about|around|circa|c\.)\s*[£]?\s*\d|~\s*\d/i.test(text) && (log.set.length || log.changed.length)) log.notes.push('You said “roughly”, so I’ve used that figure exactly as given. If you have the exact number, tell me, because the checks use it as written.');
   autoFill(c, log.notes);
   log.understood = log.understood || log.intent === 'confirm' || before !== JSON.stringify(c.b) + c.itemsDone || log.set.length > 0;
   c.started = true;

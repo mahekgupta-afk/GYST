@@ -30,7 +30,7 @@ const PRIORITIES = ['Cheapest', 'Fastest', 'Most reliable', 'Balanced'];
 const ORIGINS = ['London', 'Manchester', 'Birmingham', 'Leeds'];
 const DESTS = { Berlin: 'Germany', Frankfurt: 'Germany', Hamburg: 'Germany', Paris: 'France', Lyon: 'France', Amsterdam: 'Netherlands', Rotterdam: 'Netherlands' };
 const COUNTRIES = ['United Kingdom', 'China', 'India', 'Vietnam', 'Turkey', 'Germany'];
-const BALANCED_WEIGHTS = { cost: 0.4, speed: 0.3, reliability: 0.3 };
+const BALANCED_WEIGHTS = { cost: 1 / 3, speed: 1 / 3, reliability: 1 / 3 };
 
 /* ---------- Formatting + date helpers ---------- */
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -57,7 +57,12 @@ function dmy(iso) { if (!iso) return '—'; const [y, m, d] = iso.split('-'); re
 function niceDate(iso) { if (!iso) return '—'; const [y, m, d] = iso.split('-').map(Number); return d + ' ' + MON[m - 1] + ' ' + y; }
 function parseDate(v) {
   if (v === null || v === undefined || v === '') return null;
-  if (v instanceof Date) return isNaN(v) ? null : ymd(v.getFullYear(), v.getMonth() + 1, v.getDate());
+  if (v instanceof Date) {
+    if (isNaN(v)) return null;
+    // A date cell is a calendar day, not a moment: read it in UTC when it sits on UTC midnight, otherwise as local time.
+    const utcMidnight = v.getUTCHours() === 0 && v.getUTCMinutes() === 0 && v.getUTCSeconds() === 0;
+    return utcMidnight ? ymd(v.getUTCFullYear(), v.getUTCMonth() + 1, v.getUTCDate()) : ymd(v.getFullYear(), v.getMonth() + 1, v.getDate());
+  }
   if (typeof v === 'number') {
     if (v > 20000 && v < 80000) { const dt = new Date(Date.UTC(1899, 11, 30) + Math.floor(v) * 864e5); return ymd(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate()); }
     return null;
@@ -76,80 +81,112 @@ function num(v) {
   if (!/^-?\d*\.?\d+$/.test(s)) return null;
   return parseFloat(s);
 }
+const BLANKISH = /^(n\/?a|na|-+|—|–|unknown|tbc|tbd|none|null|nil|\?+)$/i;
+const isBlankish = v => v === null || v === undefined || String(v).trim() === '' || BLANKISH.test(String(v).trim());
 const clean = v => (v === null || v === undefined) ? null : (String(v).trim() === '' ? null : String(v).trim());
 
 /* ---------- Carrier logic ---------- */
+const letterOf = o => o.carrier.slice(-1);
+// Deterministic order: the priority's own measure first, then lower price, then fewer days, then carrier letter.
 function rankBy(list, priority) {
   const L = list.slice();
-  const price = (a, c) => a.price - c.price, time = (a, c) => a.transit - c.transit, rel = (a, c) => c.ontime - a.ontime;
-  if (priority === 'Cheapest') return L.sort((a, c) => price(a, c) || time(a, c) || rel(a, c));
-  if (priority === 'Fastest') return L.sort((a, c) => time(a, c) || rel(a, c) || price(a, c));
-  if (priority === 'Most reliable') return L.sort((a, c) => rel(a, c) || time(a, c) || price(a, c));
+  const tie = (a, c) => a.price - c.price || a.transit - c.transit || letterOf(a).localeCompare(letterOf(c));
+  if (priority === 'Cheapest') return L.sort((a, c) => tie(a, c));
+  if (priority === 'Fastest') return L.sort((a, c) => a.transit - c.transit || tie(a, c));
+  if (priority === 'Most reliable') return L.sort((a, c) => c.ontime - a.ontime || tie(a, c));
+  // Balanced: each measure scaled 0..1 across the carriers being compared (lower price and fewer days are better,
+  // higher on-time is better), then the three scores are averaged with equal weight.
   const rng = k => { const v = L.map(x => x[k]); return [Math.min.apply(null, v), Math.max.apply(null, v)]; };
   const [p0, p1] = rng('price'), [t0, t1] = rng('transit'), [o0, o1] = rng('ontime');
   const n = (v, lo, hi, inv) => hi === lo ? 1 : (inv ? (hi - v) / (hi - lo) : (v - lo) / (hi - lo));
   L.forEach(x => { x.score = BALANCED_WEIGHTS.cost * n(x.price, p0, p1, true) + BALANCED_WEIGHTS.speed * n(x.transit, t0, t1, true) + BALANCED_WEIGHTS.reliability * n(x.ontime, o0, o1, false); });
-  return L.sort((a, c) => c.score - a.score || price(a, c));
+  return L.sort((a, c) => (Math.round(c.score * 1e9) - Math.round(a.score * 1e9)) || tie(a, c));
 }
 function recommend(b) {
   const rows = CARRIERS.filter(c => c.dest === b.destCountry);
   if (!rows.length) return { error: 'unsupported', options: [] };
-  const pallets = b.pallets > 0 ? b.pallets : null;
-  const gw = typeof b.grossWeight === 'number' ? b.grossWeight : null;
+  const p = b.pallets;
+  const pallets = (typeof p === 'number' && isFinite(p) && p > 0 && Number.isInteger(p)) ? p : null;
+  const gw = (typeof b.grossWeight === 'number' && isFinite(b.grossWeight) && b.grossWeight >= 0) ? b.grossWeight : null;
   const wpp = pallets && gw !== null ? gw / pallets : null;
   const priority = PRIORITIES.indexOf(b.priority) >= 0 ? b.priority : 'Balanced';
   const options = rows.map(r => {
     const o = Object.assign({}, r);
     o.cost = pallets ? r.price * pallets : null;
-    o.eligible = wpp === null ? true : wpp <= r.maxKg + 1e-9;
+    o.eligible = wpp === null ? true : wpp <= r.maxKg + 1e-9;      // exactly at the limit passes
     o.minPallets = gw !== null ? Math.max(1, Math.ceil(gw / r.maxKg - 1e-9)) : null;
     o.minCost = o.minPallets ? o.minPallets * r.price : null;
     return o;
   });
+  // First choice for the priority, ignoring weight (used only to explain what was ruled out).
   const preferred = rankBy(options, priority)[0];
-  const elig = options.filter(o => o.eligible);
-  const recommended = elig.length ? rankBy(elig, priority)[0] : null;
+  // The recommendation only considers carriers that can take the load, then ranks them by priority.
+  const feasible = options.filter(o => o.eligible);
+  const recommended = feasible.length ? rankBy(feasible, priority)[0] : null;
   const rec = { options, pallets, gw, wpp, priority, preferred, recommended, assumedPriority: PRIORITIES.indexOf(b.priority) < 0 };
-  const selName = b._carrier && options.find(o => o.carrier === b._carrier) ? b._carrier : preferred.carrier;
-  rec.selected = options.find(o => o.carrier === selName);
+  // R-05 is checked against the carrier in use: one the user picked, otherwise the recommendation.
+  const picked = b._carrier ? options.find(o => o.carrier === b._carrier) : null;
+  rec.selected = picked || recommended || preferred;
+  rec.userPicked = !!picked;
   rec.reason = explain(rec, b);
+  rec.ruledOutNotes = ruledOutNotes(rec);
   return rec;
 }
+const plu = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+function diffText(o, r) {
+  const bits = [];
+  const dp = o.price - r.price; if (dp) bits.push(gbp(Math.abs(dp)) + ' a pallet ' + (dp < 0 ? 'cheaper' : 'dearer'));
+  const dt = o.transit - r.transit; if (dt) bits.push(plu(Math.abs(dt), 'day') + ' ' + (dt < 0 ? 'faster' : 'slower'));
+  const dr = o.ontime - r.ontime; if (dr) bits.push(plu(Math.abs(dr), 'point') + ' ' + (dr > 0 ? 'more' : 'less') + ' reliable');
+  return bits.length ? bits.join(', ') : 'the same on price, speed and reliability';
+}
 function explain(rec, b) {
-  const r = rec.recommended || rec.preferred, dest = b.destCountry, p = rec.priority, n = rec.pallets;
-  const cost = n ? ' Total ' + gbp(r.price * n) + ' for ' + n + ' pallet' + (n === 1 ? '' : 's') + '.' : '';
-  const label = r.carrier + ' (' + r.service + ')';
-  const all = rec.options;
-  let s;
-  if (p === 'Cheapest') s = label + ' is the cheapest way to ' + dest + ': ' + gbp(r.price) + ' a pallet.' + cost + ' It takes ' + r.transit + ' days and arrives on time ' + r.ontime + '% of the time.';
-  else if (p === 'Fastest') {
-    const alsoBest = all.every(o => o.ontime <= r.ontime);
-    s = label + ' is the fastest eligible option to ' + dest + ': ' + r.transit + ' days.' + (alsoBest ? ' It also has the best on-time record, ' + r.ontime + '%.' : ' It arrives on time ' + r.ontime + '% of the time.') + cost;
-  } else if (p === 'Most reliable') {
-    const alsoFast = all.every(o => o.transit >= r.transit);
-    s = label + ' has the highest on-time rate we can use here: ' + r.ontime + '%.' + (alsoFast ? ' It is also the quickest, at ' + r.transit + ' days.' : ' Transit is ' + r.transit + ' days.') + cost;
-  } else {
-    s = label + ' gives the best overall balance of price, speed and reliability for ' + dest + ' (we weigh them ' + Math.round(BALANCED_WEIGHTS.cost * 100) + '/' + Math.round(BALANCED_WEIGHTS.speed * 100) + '/' + Math.round(BALANCED_WEIGHTS.reliability * 100) + '): ' + gbp(r.price) + ' a pallet, ' + r.transit + ' days, ' + r.ontime + '% on time.' + cost;
-  }
-  if (rec.assumedPriority) s += ' No priority was given, so we used Balanced.';
-  if (rec.recommended && rec.preferred.carrier !== rec.recommended.carrier) {
-    s += ' ' + rec.preferred.carrier + ' would be your first pick for “' + p + '”, but it only accepts ' + rec.preferred.maxKg + ' kg per pallet and this load is ' + nf(rec.wpp) + ' kg per pallet.';
-  }
+  const all = rec.options, p = rec.priority, n = rec.pallets, dest = b.destCountry;
   if (!rec.recommended) {
     const maxLimit = Math.max.apply(null, all.map(o => o.maxKg));
-    s = 'No carrier on this route can take ' + nf(rec.wpp) + ' kg per pallet (the highest limit is ' + maxLimit + ' kg). The load has to be split across more pallets.';
+    return 'No carrier on this route can take ' + nf(rec.wpp) + ' kg per pallet (the highest limit is ' + maxLimit + ' kg). The load has to be split across more pallets.';
   }
+  const r = rec.recommended, label = r.carrier + ' (' + r.service + ')';
+  const cost = n ? ' Total ' + gbp(r.price * n) + ' for ' + plu(n, 'pallet') + '.' : '';
+  const feas = all.filter(o => o.eligible), others = feas.filter(o => o !== r);
+  const facts = gbp(r.price) + ' a pallet, ' + plu(r.transit, 'day') + ', ' + r.ontime + '% on time.';
+  let s;
+  if (p === 'Cheapest') s = label + ' is the cheapest carrier that can take this load to ' + dest + ': ' + gbp(r.price) + ' a pallet.' + cost + ' It takes ' + plu(r.transit, 'day') + ' and arrives on time ' + r.ontime + '% of the time.';
+  else if (p === 'Fastest') s = label + ' is the fastest carrier that can take this load to ' + dest + ': ' + plu(r.transit, 'day') + '.' + (feas.every(o => o.ontime <= r.ontime) ? ' It also has the best on-time record, ' + r.ontime + '%.' : ' It arrives on time ' + r.ontime + '% of the time.') + ' ' + gbp(r.price) + ' a pallet.' + cost;
+  else if (p === 'Most reliable') s = label + ' has the highest on-time rate of the carriers that can take this load: ' + r.ontime + '%.' + (feas.every(o => o.transit >= r.transit) ? ' It is also the quickest, at ' + plu(r.transit, 'day') + '.' : ' Transit is ' + plu(r.transit, 'day') + '.') + cost;
+  else {
+    const scores = rankBy(feas, 'Balanced').map(o => letterOf(o) + ' ' + o.score.toFixed(2)).join(', ');
+    s = label + ' scores highest on Balanced for ' + dest + ': ' + facts + cost +
+      ' Balanced scores each carrier from 0 to 1 on price, speed and reliability (lower price and fewer days are better, higher on-time is better), compares them across the carriers that can take this load, and weights the three equally. Scores: ' + scores + '.' +
+      (others.length ? ' The others lost: ' + others.map(o => o.carrier + ' is ' + diffText(o, r)).join('; ') + '.' : '');
+  }
+  if (rec.assumedPriority) s += ' No priority was given, so we used Balanced.';
   return s;
+}
+// Neutral notes about carriers that were ruled out for weight. Not a failure while another carrier can take the load.
+function ruledOutNotes(rec) {
+  if (!rec.recommended || rec.wpp === null) return [];
+  const tag = { 'Cheapest': 'cheapest per pallet', 'Fastest': 'fastest', 'Most reliable': 'most reliable', 'Balanced': 'best balanced' }[rec.priority];
+  const recTotal = rec.pallets ? rec.recommended.price * rec.pallets : null;
+  return rec.options.filter(o => !o.eligible).map(o => {
+    let t = o.carrier + (o === rec.preferred ? ' (' + tag + ')' : '') + ' was ruled out: ' + nf(rec.wpp) + ' kg per pallet exceeds its ' + o.maxKg + ' kg limit.';
+    if (o.minPallets) t += ' With ' + plu(o.minPallets, 'pallet') + ' it would fit at ' + gbp(o.minCost) + (o === rec.preferred && recTotal !== null ? ', but ' + rec.recommended.carrier + ' at ' + plu(rec.pallets, 'pallet') + ' is ' + (recTotal <= o.minCost ? 'cheaper' : 'dearer') + ' at ' + gbp(recTotal) : '') + '.';
+    return t;
+  });
 }
 
 /* ---------- Hazard detection (R-06) ---------- */
 const HAZ = [
-  { type: 'a lithium battery product', re: /\b(lithium|li[\s-]?ion|li[\s-]?po|lipo|lifepo4|power\s?banks?|e[\s-]?cig(?:arette)?s?|vapes?|vaping)\b/i },
+  { type: 'a lithium battery product', re: /\b(lithium(?![\s-]*(?:soap|grease|stearate|salt|carbonate|hydroxide|chloride)\b)|li[\s-]?ion|li[\s-]?po|lipo|lifepo4|power[\s-]?banks?|e[\s-]?cig(?:arette)?s?|vapes?|vaping)\b/i },
   { type: 'a battery product (most are lithium)', re: /\bbatter(?:y|ies)\b/i },
-  { type: 'an aerosol', re: /\b(aerosols?|spray[\s-]?paints?|spray[\s-]?cans?|hair\s?spray|body\s?spray|deodorant\s+spray|dry\s+shampoo|canned\s+air|pressuri[sz]ed\s+cans?)\b/i },
-  { type: 'a flammable liquid', re: /\b(flammable|inflammable|petrol|gasoline|kerosene|lighter\s+(?:fluid|fuel)|white\s+spirit|turpentine|acetone|methylated\s+spirits?|denatured\s+alcohol|paint\s+thinners?|nail\s+polish\s+remover|butane|propane|isopropyl|rubbing\s+alcohol|hand\s+sanitis?er|alcohol[\s-]based)\b/i }
+  { type: 'an aerosol or pressurised can', re: /\b(aerosols?|spray[\s-]?paints?|spray[\s-]?cans?|hair\s?spray|body\s?spray|deodorant\s+spray|dry\s+shampoo|canned\s+air|pressuri[sz]ed)\b/i },
+  { type: 'a flammable liquid or gas', re: /\b(flammable|inflammable|petrol|gasoline|kerosene|lighter\s+(?:fluid|fuel)|white\s+spirit|turpentine|acetone|methylated\s+spirits?|denatured\s+alcohol|paint\s+thinners?|nail\s+polish\s+remover|butane|propane|gas\s+(?:canisters?|cylinders?|bottles?)|isopropyl|rubbing\s+alcohol|hand\s+sanitis?er|(?:alcohol|ethanol)[\s-]based)\b/i },
+  { type: 'a perfume or aftershave (possibly a flammable liquid)', re: /\b(perfumes?|aftershaves?|eau\s+de\s+(?:toilette|parfum|cologne)|colognes?|parfum)\b/i },
+  { type: 'matches or a lighter (flammable)', re: /\b(?:(?:cigarette|gas|pocket|disposable|bbq|zippo|torch)\s+lighters?|lighters|box(?:es)?\s+of\s+matches|matchbooks?|matchsticks?|safety\s+matches)\b/i }
 ];
-const NEG = /\b(non[\s-]?flammable|not\s+flammable|non[\s-]?aerosol|battery[\s-]?free|lithium[\s-]?free|no\s+batter(?:y|ies)|without\s+batter(?:y|ies)|batteries\s+not\s+included|non[\s-]?lithium)\b/gi;
+// These phrases say the product does not have the hazard, so they are removed before matching.
+// “batteries not included” is deliberately NOT here: it is ambiguous, so it is still flagged.
+const NEG = /\b(non[\s-]?flammable|not\s+flammable|non[\s-]?aerosol|battery[\s-]?free|lithium[\s-]?free|no\s+batter(?:y|ies)|without\s+batter(?:y|ies)|non[\s-]?lithium|alcohol[\s-]?free)\b/gi;
 function hazardOf(it) {
   const text = ((it.desc || '') + ' ' + (it.sku || '')).replace(NEG, ' ');
   for (const h of HAZ) { const m = h.re.exec(text); if (m) return { type: h.type, word: m[0] }; }
@@ -166,43 +203,54 @@ function evaluate(b, opts) {
   const today = (opts && opts.todayISO) || todayISO();
   const items = b.items || [];
   const issues = [], skipped = {};
-  const add = (rule, sev, title, what, fix, item) => issues.push({ rule, sev, title, what, fix, item: item || null });
+  // Each issue says where it is: the booking, the SKU, and the spreadsheet row when the data came from a file.
+  const add = (rule, sev, title, what, fix, item, src) => issues.push({ rule, sev, title, what, fix, item: item || null, bookingId: b.id || null,
+    sheet: src ? (src._row ? 'Items' : null) : (b._row ? 'Bookings' : null), row: src ? (src._row || null) : (b._row || null) });
   const label = it => (it.sku || 'item') + (it.desc ? ' (' + it.desc + ')' : '');
   const rec = recommend(b);
 
   // Missing or unreadable inputs
-  const data = (title, what, fix) => add('DATA', 'red', title, what, fix);
-  if (!items.length) data('No items found', 'This booking has no product lines, so nothing can be checked against the invoice.', 'Add at least one product line with quantity, price and carton details.');
+  const data = (title, what, fix, src) => add('DATA', 'red', title, what, fix, null, src);
+  if (b._dupCount > 1) data('Duplicate Booking ID', 'The Booking ID “' + b.id + '” appears ' + b._dupCount + ' times in the Bookings sheet (rows ' + (b._dupRows || []).join(', ') + '). Items can only be linked to one of them' + (b._dupLater ? ', and they were linked to the first row, so this row has none.' : '.'), 'Give every booking its own Booking ID, then upload the file again.');
+  if (!items.length && !b._dupLater) data('No items found', 'This booking has no product lines in the Items sheet, so nothing can be checked against the invoice.', 'Add at least one product line with quantity, price and carton details.');
   if (rec.error) data('Route not supported', 'We can only book from the UK to Germany, France or the Netherlands. Destination country is “' + (b.destCountry || 'blank') + '”.', 'Use Germany, France or the Netherlands as the destination country.');
-  if (!(b.pallets > 0)) data('Pallet count missing', 'Number of pallets is blank or zero, so weight per pallet and price can’t be worked out.', 'Enter how many pallets the shipment is on.');
+  if (b.pallets === null || b.pallets === undefined) data('Pallet count missing', 'Number of pallets is blank, so weight per pallet and price can’t be worked out.', 'Enter how many pallets the shipment is on.');
+  else if (!(typeof b.pallets === 'number' && isFinite(b.pallets) && b.pallets > 0 && Number.isInteger(b.pallets))) data('Pallet count isn’t valid', 'Number of pallets is ' + b.pallets + ', but it must be a whole number of at least 1, so weight per pallet and price can’t be worked out.', 'Enter how many pallets the shipment is on (1 or more).');
   if (typeof b.grossWeight !== 'number') data('Gross weight missing', 'Total gross weight is blank or not a number.', 'Enter the total weight of everything shipped, including cartons and pallets.');
   const itemMiss = [];
   items.forEach(it => {
     [['qty', 'quantity'], ['price', 'unit price'], ['upc', 'units per carton'], ['cartons', 'cartons'], ['unitWeight', 'unit weight']].forEach(([k, n]) => { if (typeof it[k] !== 'number') itemMiss.push({ it, k, n }); });
   });
-  itemMiss.forEach(m => data('Missing ' + m.n + ' for ' + (m.it.sku || 'an item'), label(m.it) + ' has no usable ' + m.n + '.', 'Fill in ' + m.n + ' for this item.'));
+  itemMiss.forEach(m => data('Missing ' + m.n + ' for ' + (m.it.sku || 'an item'), label(m.it) + ' has no usable ' + m.n + '.', 'Fill in ' + m.n + ' for this item.', m.it));
   const has = (k) => items.every(i => typeof i[k] === 'number');
 
-  const sumVal = items.reduce((s, i) => s + (i.qty || 0) * (i.price || 0), 0);
+  const noItems = !items.length;
+  const pence = v => Math.round(v * 100 + 1e-7);
+  const sumVal = Math.round(items.reduce((s, i) => s + (i.qty || 0) * (i.price || 0), 0) * 100 + 1e-7) / 100;
   const sumCartons = items.reduce((s, i) => s + (i.cartons || 0), 0);
   const sumWt = items.reduce((s, i) => s + (i.qty || 0) * (i.unitWeight || 0), 0);
 
   // R-01 HS code
   items.forEach(it => {
     const h = hsInfo(it.hs);
-    if (h.blank) add('R-01', 'red', 'HS code missing', label(it) + ' has no HS code. Customs can’t classify it, so it is likely to be held.', 'Look the product up in the UK Trade Tariff (gov.uk/trade-tariff) and enter at least the first 6 digits.', it.sku);
-    else if (!h.valid) add('R-01', 'red', 'HS code isn’t a number', label(it) + ' has the HS code “' + h.raw + '”, which contains characters other than digits.', 'Enter digits only, at least 6 (for example 691200).', it.sku);
-    else if (h.digits.length < 6) add('R-01', 'red', 'HS code too short', label(it) + ' has the HS code “' + h.raw + '” with only ' + h.digits.length + ' digits. At least 6 are required.' + (h.numeric && h.digits.length === 5 ? ' If the code starts with 0, the spreadsheet may have dropped it (091200 saved as 91200).' : ''), 'Replace it with the full code (6 digits or more) from the UK Trade Tariff.' + (h.numeric && h.digits.length === 5 ? ' Format the HS code column as text so leading zeros stay.' : ''), it.sku);
+    if (h.blank) add('R-01', 'red', 'HS code missing', label(it) + ' has no HS code. Customs can’t classify it, so it is likely to be held.', 'Look the product up in the UK Trade Tariff (gov.uk/trade-tariff) and enter at least the first 6 digits.', it.sku, it);
+    else if (!h.valid) add('R-01', 'red', 'HS code isn’t a number', label(it) + ' has the HS code “' + h.raw + '”, which contains characters other than digits.', 'Enter digits only, at least 6 (for example 691200).', it.sku, it);
+    else if (h.digits.length < 6) add('R-01', 'red', 'HS code too short', label(it) + ' has the HS code “' + h.raw + '” with only ' + h.digits.length + ' digits. At least 6 are required.' + (h.digits.length === 5 ? ' A leading zero may have been dropped (for example 090111 saved as 90111).' : ''), 'Replace it with the full code (6 digits or more) from the UK Trade Tariff.' + (h.digits.length === 5 ? ' Format the HS code column as text so leading zeros stay.' : ''), it.sku, it);
   });
 
-  // R-02 declared value
-  if (typeof b.declaredValue !== 'number') { skipped['R-02'] = 1; data('Declared value missing', 'Total declared value is blank or not a number.', 'Enter the total value of the goods in GBP.'); }
+  // R-02 declared value (compared in whole pence; up to and including exactly 1% of the items total passes)
+  if (noItems) skipped['R-02'] = 1;
+  else if (typeof b.declaredValue !== 'number') { skipped['R-02'] = 1; data('Declared value missing', 'Total declared value is blank or not a number.', 'Enter the total value of the goods in GBP.'); }
   else if (!has('qty') || !has('price')) skipped['R-02'] = 1;
   else {
-    const diff = Math.abs(b.declaredValue - sumVal), pct = sumVal === 0 ? (diff === 0 ? 0 : Infinity) : diff / sumVal;
-    if (pct > 0.01 + 1e-12) add('R-02', 'red', 'Declared value doesn’t match the items',
-      'Declared value is ' + gbp(b.declaredValue) + ', but quantity × unit price across all items adds up to ' + gbp(sumVal) + ' (' + (isFinite(pct) ? nf(pct * 100) + '% ' + (b.declaredValue > sumVal ? 'higher' : 'lower') : 'no match') + '; up to 1% is allowed). Customs relies on the invoice value, so a gap invites questions or a hold.',
-      'Change the declared value to ' + gbp(sumVal) + ', or correct the quantities or unit prices if the declared figure is the right one.');
+    const decP = pence(b.declaredValue), sumP = pence(sumVal), diffP = Math.abs(decP - sumP);
+    const within = sumP === 0 ? diffP === 0 : diffP * 100 <= sumP;
+    if (!within) {
+      const pct = sumP === 0 ? null : diffP / sumP;
+      add('R-02', 'red', 'Declared value doesn’t match the items',
+        'Declared value is ' + gbp(b.declaredValue) + ', but quantity × unit price across all items adds up to ' + gbp(sumVal) + (pct === null ? '' : ' (' + nf(pct * 100) + '% ' + (decP > sumP ? 'higher' : 'lower') + ' than the items') + (pct === null ? '' : '; up to 1% is allowed)') + '. Customs relies on the invoice value, so a gap invites questions or a hold.',
+        'Set the declared value to ' + gbp(sumVal) + ', or correct the quantities or unit prices if the declared figure is the right one.');
+    }
   }
 
   // R-03 carton maths per item
@@ -212,45 +260,51 @@ function evaluate(b, opts) {
       const fix = (it.qty % it.upc === 0)
         ? 'If the quantity is right, this item should be ' + (it.qty / it.upc) + ' cartons. If ' + it.cartons + ' cartons is right, the quantity should be ' + (it.upc * it.cartons) + ' units. Check the packing list and fix whichever is wrong.'
         : it.qty + ' units doesn’t fill a whole number of cartons of ' + it.upc + ' (' + (it.qty % it.upc) + ' left over). Check units per carton, cartons and quantity against the packing list.';
-      add('R-03', 'red', 'Carton maths doesn’t add up', label(it) + ': ' + it.upc + ' units per carton × ' + it.cartons + ' cartons = ' + (it.upc * it.cartons) + ' units, but the quantity is ' + it.qty + '. The receiving warehouse will count a different number from the paperwork.', fix, it.sku);
+      add('R-03', 'red', 'Carton maths doesn’t add up', label(it) + ': ' + it.upc + ' units per carton × ' + it.cartons + ' cartons = ' + (it.upc * it.cartons) + ' units, but the quantity is ' + it.qty + '. The receiving warehouse will count a different number from the paperwork.', fix, it.sku, it);
     }
   });
 
   // R-04 total cartons
-  if (typeof b.cartons !== 'number') { skipped['R-04'] = 1; data('Total cartons missing', 'The booking’s total cartons is blank or not a number.', 'Enter the total number of cartons.'); }
+  if (noItems) skipped['R-04'] = 1;
+  else if (typeof b.cartons !== 'number') { skipped['R-04'] = 1; data('Total cartons missing', 'The booking’s total cartons is blank or not a number.', 'Enter the total number of cartons.'); }
   else if (!has('cartons')) skipped['R-04'] = 1;
   else if (Math.abs(b.cartons - sumCartons) > 1e-9) add('R-04', 'red', 'Total cartons don’t match the items',
     'The booking says ' + b.cartons + ' cartons, but the items add up to ' + sumCartons + '. Labels and counts at the warehouse won’t match the declaration.',
     'Set total cartons to ' + sumCartons + ', or add the missing ' + Math.abs(b.cartons - sumCartons) + ' carton' + (Math.abs(b.cartons - sumCartons) === 1 ? '' : 's') + ' to the item lines if ' + b.cartons + ' is right.');
 
-  // R-05 weight per pallet against the chosen carrier
+  // R-05 weight per pallet against the carrier in use. Passes when the recommended carrier can take the load;
+  // Red only when no carrier can, or when the user has picked one that can't.
   const sel = rec.selected;
   if (!sel || rec.wpp === null) skipped['R-05'] = 1;
   else if (!sel.eligible) {
-    const over = rec.wpp - sel.maxKg, fixes = [];
-    if (rec.recommended) fixes.push('Switch to ' + rec.recommended.carrier + ' (' + rec.recommended.service + '), which takes up to ' + rec.recommended.maxKg + ' kg per pallet: ' + gbp(rec.recommended.price * rec.pallets) + ' for ' + rec.pallets + ' pallet' + (rec.pallets === 1 ? '' : 's') + '.');
-    const keepN = sel.minPallets, keepCost = sel.minCost;
-    fixes.push((rec.recommended ? 'Or keep ' + sel.carrier + ' and ' : 'Split the load: with ' + sel.carrier + ' you need ') + (rec.recommended ? 'spread the load over ' : '') + keepN + ' pallets (' + gbp(keepCost) + ', ' + nf(rec.gw / keepN) + ' kg each).');
-    if (!rec.recommended) rec.options.filter(o => o !== sel).forEach(o => fixes.push('With ' + o.carrier + ' you need ' + o.minPallets + ' pallets (' + gbp(o.minCost) + ').'));
-    add('R-05', 'red', 'Pallets too heavy for ' + sel.carrier,
-      'Weight per pallet is ' + nf(rec.wpp) + ' kg (' + nf(rec.gw) + ' kg ÷ ' + rec.pallets + ' pallet' + (rec.pallets === 1 ? '' : 's') + '). ' + sel.carrier + ' (' + sel.service + ') accepts at most ' + sel.maxKg + ' kg per pallet, so this is ' + nf(over) + ' kg over. The carrier is likely to refuse or re-price the pallets.',
+    const fixes = [];
+    const nP = rec.pallets;
+    if (rec.recommended) {
+      fixes.push('Switch to ' + rec.recommended.carrier + ' (' + rec.recommended.service + '), which takes up to ' + rec.recommended.maxKg + ' kg per pallet: ' + gbp(rec.recommended.price * nP) + ' for ' + plu(nP, 'pallet') + '.');
+      fixes.push('Or keep ' + sel.carrier + ' and spread the load over ' + plu(sel.minPallets, 'pallet') + ' (' + gbp(sel.minCost) + ', ' + nf(rec.gw / sel.minPallets) + ' kg each).');
+    } else {
+      fixes.push('Split the load over more pallets. ' + rec.options.slice().sort((x, y) => x.minCost - y.minCost || x.minPallets - y.minPallets).map(o => o.carrier + ' needs ' + plu(o.minPallets, 'pallet') + ' (' + gbp(o.minCost) + ', ' + nf(rec.gw / o.minPallets) + ' kg each)').join('; ') + '.');
+    }
+    const maxLimit = Math.max.apply(null, rec.options.map(o => o.maxKg));
+    add('R-05', 'red', rec.recommended ? 'Pallets too heavy for ' + sel.carrier : 'Pallets too heavy for every carrier on this route',
+      'Weight per pallet is ' + nf(rec.wpp) + ' kg (' + nf(rec.gw) + ' kg ÷ ' + plu(nP, 'pallet') + '). ' + (rec.recommended ? sel.carrier + ' (' + sel.service + ') accepts at most ' + sel.maxKg + ' kg per pallet, so this is ' + nf(rec.wpp - sel.maxKg) + ' kg over.' : 'No carrier on this route accepts more than ' + maxLimit + ' kg per pallet, so this is ' + nf(rec.wpp - maxLimit) + ' kg over the highest limit.') + ' The carrier is likely to refuse or re-price the pallets.',
       fixes.join(' '));
   }
 
   // R-06 dangerous goods
   items.forEach(it => {
     const hz = hazardOf(it);
-    if (hz) add('R-06', 'red', 'Restricted goods', label(it) + ' looks like ' + hz.type + ' (matched “' + hz.word + '”). Lithium batteries, aerosols and flammable liquids can’t go as ordinary freight.', 'Remove this item from the booking, or ship it separately with a carrier approved for dangerous goods. If it is not actually restricted (for example battery-free), correct the description.', it.sku);
+    if (hz) add('R-06', 'red', 'Restricted goods', label(it) + ' looks like ' + hz.type + ' (matched “' + hz.word + '”). Lithium batteries, aerosols and flammable liquids can’t go as ordinary freight.', 'Remove this item from the booking, or ship it separately with a carrier approved for dangerous goods. If it is not actually restricted (for example battery-free), correct the description.', it.sku, it);
   });
 
   // R-07 gross weight not below the sum of the items
-  if (typeof b.grossWeight !== 'number' || !has('qty') || !has('unitWeight')) skipped['R-07'] = 1;
+  if (noItems || typeof b.grossWeight !== 'number' || !has('qty') || !has('unitWeight')) skipped['R-07'] = 1;
   else if (b.grossWeight < sumWt - 1e-9) {
     let extra = '';
     if (b.pallets > 0 && sel && sumWt / b.pallets > sel.maxKg) extra = ' Heads up: at ' + nf(sumWt) + ' kg the load would be ' + nf(sumWt / b.pallets) + ' kg per pallet, above ' + sel.carrier + '’s ' + sel.maxKg + ' kg limit.';
     add('R-07', 'amber', 'Gross weight is lower than the goods alone',
       'Total gross weight is ' + nf(b.grossWeight) + ' kg, but the items alone weigh ' + nf(sumWt) + ' kg (unit weight × quantity), before cartons and pallets. Under-declaring weight leads to carrier surcharges.',
-      'Raise the gross weight to at least ' + nf(sumWt) + ' kg; with cartons and pallets it will usually be higher.' + extra);
+      'Raise the gross weight to at least ' + nf(sumWt) + ' kg (the expected minimum); with cartons and pallets it will usually be higher.' + extra);
   }
 
   // R-08 delivery appointment
@@ -260,11 +314,11 @@ function evaluate(b, opts) {
 
   // R-09 country of origin
   items.forEach(it => {
-    if (!clean(it.coo)) add('R-09', 'amber', 'Country of origin missing', label(it) + ' has no country of origin. This is where the product was made, not where it ships from. Customs uses it to set duty.', 'Add the country where it was made (for example United Kingdom, China, India, Vietnam, Turkey or Germany).', it.sku);
+    if (isBlankish(it.coo)) add('R-09', 'amber', 'Country of origin missing', label(it) + ' has no country of origin. This is where the product was made, not where it ships from. Customs uses it to set duty.', 'Add the country where it was made (for example United Kingdom, China, India, Vietnam, Turkey or Germany).', it.sku, it);
   });
 
   // R-10 date
-  if (!b.readyDate) { skipped['R-10'] = 1; data('Ready date missing or unreadable', 'The ready to ship date is blank or isn’t a valid DD-MM-YYYY date.', 'Enter the date in DD-MM-YYYY format.'); }
+  if (!b.readyDate) { skipped['R-10'] = 1; data('Ready date missing or unreadable', (b.readyDateRaw !== null && b.readyDateRaw !== undefined && String(b.readyDateRaw).trim() !== '' ? 'The ready to ship date “' + String(b.readyDateRaw).trim() + '” isn’t a valid DD-MM-YYYY date.' : 'The ready to ship date is blank.'), 'Enter the date as DD-MM-YYYY, for example 05-11-2026 for 5 November.'); }
   else if (b.readyDate < today) {
     const ago = diffDays(b.readyDate, today);
     add('R-10', 'amber', 'Ready date is in the past', 'The ready to ship date is ' + niceDate(b.readyDate) + ', which was ' + ago + ' day' + (ago === 1 ? '' : 's') + ' ago (today is ' + niceDate(today) + '). A carrier can’t collect in the past.', 'Choose today (' + dmy(today) + ') or a later date.');
@@ -313,26 +367,44 @@ function summarise(b, ev) {
 /* ---------- Spreadsheet reading ---------- */
 const nh = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function findHeaderRow(rows) {
-  for (let i = 0; i < Math.min(rows.length, 15); i++) if (rows[i] && rows[i].some(c => nh(c) === 'booking id')) return i;
+  for (let i = 0; i < Math.min(rows.length, 12); i++) if (rows[i] && rows[i].some(c => nh(c) === 'booking id')) return i;
   return -1;
 }
-function tableFromRows(rows) {
+// rowOffset is how many sheet rows sit above the first row we were given, so _row is the real spreadsheet row number.
+function tableFromRows(rows, rowOffset) {
   const hi = findHeaderRow(rows);
   if (hi < 0) return null;
   const heads = rows[hi].map(nh);
-  const recs = rows.slice(hi + 1).filter(r => r && r.some(c => c !== null && c !== undefined && String(c).trim() !== '')).map((r, n) => {
-    const o = { _row: hi + 2 + n };
+  const recs = [];
+  rows.slice(hi + 1).forEach((r, n) => {
+    if (!r || !r.some(c => c !== null && c !== undefined && String(c).trim() !== '')) return;   // blank or whitespace-only row
+    const o = { _row: (rowOffset || 0) + hi + 2 + n };
     heads.forEach((h, i) => { if (h) o[h] = r[i] === undefined ? null : r[i]; });
-    return o;
+    recs.push(o);
   });
+  recs.heads = heads;
   return recs;
 }
 function pickKey(o, ...cands) { for (const c of cands) if (c in o) return o[c]; return null; }
-function bookingsFromTables(bookingRows, itemRows) {
+// Columns the sheets must have. Each entry is [display name, accepted header spellings].
+const BOOKING_COLS = [['Booking ID', ['booking id']], ['Destination city', ['destination city']], ['Destination country', ['destination country']], ['Destination type', ['destination type']],
+  ['Ready to ship date', ['ready to ship date']], ['Pallets', ['pallets']], ['Cartons', ['cartons']], ['Total declared value', ['total declared value', 'declared value']],
+  ['Total gross weight (kg)', ['total gross weight kg', 'total gross weight', 'gross weight kg', 'gross weight']], ['Delivery appointment booked', ['delivery appointment booked', 'delivery appointment']]];
+const ITEM_COLS = [['Booking ID', ['booking id']], ['Description', ['description']], ['HS code', ['hs code']], ['Quantity (units)', ['quantity units', 'quantity']], ['Unit price', ['unit price']],
+  ['Units per carton', ['units per carton']], ['Cartons', ['cartons']], ['Unit weight (kg)', ['unit weight kg', 'unit weight']], ['Country of origin', ['country of origin']]];
+const missingCols = (heads, spec) => spec.filter(([, alts]) => !alts.some(a => heads.indexOf(a) >= 0)).map(([n]) => n);
+const pick = (r, ...keys) => { for (const k of keys) if (k in r) return r[k]; return null; };
+
+function bookingsFromTables(bookingRows, itemRows, opts) {
+  opts = opts || {};
   const warnings = [];
-  const bt = tableFromRows(bookingRows), it = tableFromRows(itemRows);
-  if (!bt) return { error: 'I couldn’t find a “Booking ID” header in the Bookings sheet.' };
-  if (!it) return { error: 'I couldn’t find a “Booking ID” header in the Items sheet.' };
+  const bt = tableFromRows(bookingRows, opts.bookingRowOffset), it = tableFromRows(itemRows, opts.itemRowOffset);
+  if (!bt) return { error: 'I couldn’t find a “Booking ID” header in the first rows of the Bookings sheet.' };
+  if (!it) return { error: 'I couldn’t find a “Booking ID” header in the first rows of the Items sheet.' };
+  const mb = missingCols(bt.heads, BOOKING_COLS), mi = missingCols(it.heads, ITEM_COLS);
+  if (mb.length || mi.length) {
+    return { error: [mb.length ? 'The Bookings sheet is missing the column' + (mb.length === 1 ? '' : 's') + ': ' + mb.join(', ') + '.' : '', mi.length ? 'The Items sheet is missing the column' + (mi.length === 1 ? '' : 's') + ': ' + mi.join(', ') + '.' : '', 'Add ' + (mb.length + mi.length === 1 ? 'it' : 'them') + ' (the blank template shows the layout) and upload again.'].filter(Boolean).join(' ') };
+  }
   const bookings = [];
   bt.forEach(r => {
     const id = clean(r['booking id']);
@@ -340,50 +412,73 @@ function bookingsFromTables(bookingRows, itemRows) {
     const prRaw = clean(pickKey(r, 'seller priority'));
     const pr = PRIORITIES.find(p => prRaw && p.toLowerCase() === prRaw.toLowerCase());
     const dtRaw = clean(pickKey(r, 'destination type'));
-    const apRaw = clean(pickKey(r, 'delivery appointment booked'));
+    const apRaw = clean(pickKey(r, 'delivery appointment booked', 'delivery appointment'));
     const b = {
-      id, seller: clean(r['seller name']), originCity: clean(r['origin city']), originCountry: clean(r['origin country']),
+      id, _row: r._row, seller: clean(r['seller name']), originCity: clean(r['origin city']), originCountry: clean(r['origin country']),
       destCity: clean(r['destination city']), destCountry: clean(r['destination country']),
       destType: dtRaw ? (/ware/i.test(dtRaw) ? 'Warehouse' : 'Business address') : null,
       readyDate: parseDate(r['ready to ship date']), readyDateRaw: r['ready to ship date'],
       priority: pr || null, priorityRaw: prRaw,
-      pallets: num(r['pallets']), cartons: num(r['cartons']), declaredValue: num(r['total declared value']),
-      currency: clean(r['currency']) || 'GBP', grossWeight: num(r['total gross weight kg']),
-      appointment: apRaw ? (/^y/i.test(apRaw) ? 'Yes' : 'No') : 'No', items: []
+      pallets: num(r['pallets']), cartons: num(r['cartons']), declaredValue: num(pick(r, 'total declared value', 'declared value')),
+      currency: clean(r['currency']) || 'GBP', grossWeight: num(pick(r, 'total gross weight kg', 'total gross weight', 'gross weight kg', 'gross weight')),
+      appointment: apRaw && /^(y|yes|true|1)$/i.test(apRaw) ? 'Yes' : 'No', items: []
     };
     // Optional extra column written by corrected files: keeps a carrier the user chose. Absent in the standard template,
-    // in which case R-05 is checked against the carrier that matches the seller's priority, as before.
+    // in which case R-05 uses the recommended carrier for the seller's priority.
     const carRaw = clean(pickKey(r, 'chosen carrier'));
     const carM = carRaw && /^carrier\s*([abc])$/i.exec(carRaw);
     if (carM) b._carrier = 'Carrier ' + carM[1].toUpperCase();
     bookings.push(b);
   });
-  const byId = {}; bookings.forEach(b => { byId[b.id.toLowerCase()] = b; });
+  // Booking IDs match case-insensitively. A repeated ID is reported; items link to the first row with that ID.
+  const byId = {}, seenRows = {};
+  bookings.forEach((b, i) => {
+    b._uid = i;
+    const k = b.id.toLowerCase();
+    (seenRows[k] = seenRows[k] || []).push(b._row);
+    if (!byId[k]) byId[k] = b; else b._dupLater = true;
+  });
+  bookings.forEach(b => { const rows = seenRows[b.id.toLowerCase()]; if (rows.length > 1) { b._dupCount = rows.length; b._dupRows = rows; } });
+  const dupIds = Object.keys(seenRows).filter(k => seenRows[k].length > 1);
+  dupIds.forEach(k => warnings.push('Booking ID “' + byId[k].id + '” appears ' + seenRows[k].length + ' times in the Bookings sheet (rows ' + seenRows[k].join(', ') + '). Each copy is flagged, and its items are linked to the first one.'));
   const orphan = {};
   it.forEach(r => {
     const id = clean(r['booking id']); if (!id) return;
     const b = byId[id.toLowerCase()];
     const item = {
+      _row: r._row,
       sku: clean(r['sku']), desc: clean(r['description']), hs: (r['hs code'] === null || r['hs code'] === undefined || String(r['hs code']).trim() === '') ? null : r['hs code'],
-      qty: num(r['quantity units']), price: num(r['unit price']), upc: num(r['units per carton']), cartons: num(r['cartons']),
-      unitWeight: num(r['unit weight kg']), coo: clean(r['country of origin'])
+      qty: num(pick(r, 'quantity units', 'quantity')), price: num(r['unit price']), upc: num(r['units per carton']), cartons: num(r['cartons']),
+      unitWeight: num(pick(r, 'unit weight kg', 'unit weight')), coo: isBlankish(r['country of origin']) ? null : clean(r['country of origin'])
     };
-    if (b) b.items.push(item); else orphan[id] = (orphan[id] || 0) + 1;
+    if (b) b.items.push(item); else (orphan[id] = orphan[id] || []).push(r._row);
   });
-  Object.keys(orphan).forEach(id => warnings.push('Items listed for ' + id + ' have no matching booking, so they were ignored.'));
+  Object.keys(orphan).forEach(id => warnings.push('Items listed for “' + id + '” (Items sheet, row' + (orphan[id].length === 1 ? ' ' : 's ') + orphan[id].join(', ') + ') have no matching booking, so they were ignored.'));
   return { bookings, warnings };
 }
 function parseWorkbook(XLSX, data) {
-  const wb = XLSX.read(data, { type: 'array' });
-  const names = wb.SheetNames.filter(n => !/carrier|rule|allowed|field|gloss/i.test(n));
-  const bn = names.find(n => /booking/i.test(n)) || names[0];
-  const inn = names.find(n => /^items?$/i.test(n.trim())) || names.find(n => /item/i.test(n)) || names[1];
-  if (!bn || !inn || bn === inn) return { error: 'I need two sheets: Bookings and Items. This file has ' + wb.SheetNames.length + ' sheet' + (wb.SheetNames.length === 1 ? '' : 's') + '.' };
-  const rows = n => XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null, blankrows: false });
-  return bookingsFromTables(rows(bn), rows(inn));
+  let wb;
+  try { wb = XLSX.read(data, { type: 'array' }); } catch (e) { return { error: 'That file couldn’t be read as a spreadsheet. Please upload an .xlsx or .ods file.' }; }
+  const all = wb.SheetNames || [];
+  const norm = n => String(n).trim().toLowerCase();
+  const ignore = /carrier|rule|allowed|field|gloss/i;       // reference sheets are never used: the app has its own rate card and rules
+  const find = (exact, fuzzy) => all.find(n => exact.indexOf(norm(n)) >= 0) || all.find(n => !ignore.test(n) && fuzzy.test(n));
+  let bn = find(['bookings', 'booking'], /booking/i), inn = find(['items', 'item'], /item/i);
+  const rest = all.filter(n => !ignore.test(n));
+  if (!bn && !inn && rest.length >= 2) { bn = rest[0]; inn = rest[1]; }       // sheets with other names: first two
+  const missing = [!bn ? 'Bookings' : '', !inn ? 'Items' : ''].filter(Boolean);
+  if (missing.length || bn === inn) {
+    return { error: 'I couldn’t find a sheet called ' + (missing.join(' or ') || 'Items') + '. This file has: ' + (all.length ? all.map(n => '“' + String(n).trim() + '”').join(', ') : 'no sheets') + '. I need one sheet named Bookings and one named Items.' };
+  }
+  const grab = n => {
+    const ws = wb.Sheets[n];
+    const off = ws && ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']).s.r : 0;
+    return { rows: XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true }), off };
+  };
+  const B = grab(bn), I = grab(inn);
+  return bookingsFromTables(B.rows, I.rows, { bookingRowOffset: B.off, itemRowOffset: I.off });
 }
 
-/* ---------- Sample data (same structure as the case template) ---------- */
 const BH = ['Booking ID', 'Seller name', 'Origin city', 'Origin country', 'Destination city', 'Destination country', 'Destination type', 'Ready to ship date', 'Seller priority', 'Pallets', 'Cartons', 'Total declared value', 'Currency', 'Total gross weight (kg)', 'Delivery appointment booked'];
 const IH = ['Booking ID', 'SKU', 'Description', 'HS code', 'Quantity (units)', 'Unit price', 'Units per carton', 'Cartons', 'Unit weight (kg)', 'Country of origin'];
 function sampleTables(today) {
@@ -434,6 +529,6 @@ function sampleTables(today) {
 export {
   CARRIERS, RULES, PRIORITIES, ORIGINS, DESTS, COUNTRIES, BALANCED_WEIGHTS, BH, IH,
   gbp, nf, ymd, todayISO, addDays, diffDays, dmy, niceDate, parseDate, num, clean,
-  rankBy, recommend, evaluate, summarise, hazardOf, hsInfo,
+  rankBy, recommend, evaluate, summarise, hazardOf, hsInfo, isBlankish,
   bookingsFromTables, parseWorkbook, sampleTables
 };

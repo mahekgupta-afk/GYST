@@ -16,7 +16,9 @@ const SKIPPABLE = /"code":\s*(429|503|404)|UNAVAILABLE|RESOURCE_EXHAUSTED/;
 /** Ask Gemini for a JSON reply. Returns the raw text; callers validate it. */
 export async function askJson(prompt: string): Promise<string> {
   let last: unknown;
+  const started = Date.now();
   for (const model of MODELS()) {
+    if (Date.now() - started > 8000) break;     // total budget: the browser gives up after 14 s
     try {
       const res = await ai().models.generateContent({
         model,

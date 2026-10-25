@@ -1,11 +1,11 @@
 'use client';
 import { useState, type ReactNode } from 'react';
 import { PF, C } from '@/lib/pf';
-import { hasChanges, type Spec, type Change } from '@/lib/fixes';
+import { hasChanges, canBook, unacknowledged, issueKey, type Spec, type Change } from '@/lib/fixes';
 import { QuickFix, EditableSheet } from './FixEditor';
 
 export const plural = (n: number, w: string, p?: string) => n + ' ' + (n === 1 ? w : p || w + 's');
-export type Opts = { fix: (s: Spec) => void; book: () => void; reset: () => void; booking: boolean };
+export type Opts = { fix: (s: Spec) => void; book: () => void; reset: () => void; booking: boolean; ack: (keys: string[]) => void };
 
 /* ---------- shared pieces ---------- */
 function RuleStrip({ ev }: { ev: any }) {
@@ -52,7 +52,8 @@ function Issues({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
           <header>
             <span className={'pill ' + i.sev}>{i.sev === 'red' ? 'Red: must fix' : 'Amber: should fix'}</span>
             <span className="pill grey">{i.rule === 'DATA' ? 'Missing data' : i.rule}</span>
-            {i.item ? <span className="pill grey">{i.item}</span> : null}
+            {i.item ? <span className="pill grey">{'SKU ' + i.item}</span> : null}
+            {i.row ? <span className="pill grey">{(i.bookingId ? i.bookingId + ' · ' : '') + i.sheet + ' sheet, row ' + i.row}</span> : null}
             <h4>{i.title}</h4>
           </header>
           <dl><dt>What’s wrong</dt><dd>{i.what}</dd><dt>How to fix</dt><dd>{i.fix}</dd></dl>
@@ -77,8 +78,9 @@ function CarrierSection({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
         <>
           <div className="reco-top"><span className="reco-name">{r.carrier + ' · ' + r.service}</span><span className="pill grey">{'for “' + rec.priority + '”' + (rec.assumedPriority ? ' (assumed)' : '')}</span></div>
           <p>{rec.reason}</p>
+          {rec.ruledOutNotes && rec.ruledOutNotes.length ? <div className="ruledout" role="note"><b>Ruled out for weight</b>{rec.ruledOutNotes.map((t: string, k: number) => <p key={k}>{t}</p>)}</div> : null}
           <div className="stats">
-            <Stat v={PF.gbp(r.price * rec.pallets)} l={'total, ' + plural(rec.pallets, 'pallet')} /><Stat v={r.transit + ' days'} l="transit" /><Stat v={r.ontime + '%'} l="on time" /><Stat v={PF.nf(rec.wpp) + ' kg'} l={'per pallet (limit ' + r.maxKg + ')'} />
+            <Stat v={rec.pallets ? PF.gbp(r.price * rec.pallets) : '—'} l={rec.pallets ? 'total, ' + plural(rec.pallets, 'pallet') : 'total (pallets needed)'} /><Stat v={r.transit + ' days'} l="transit" /><Stat v={r.ontime + '%'} l="on time" /><Stat v={PF.nf(rec.wpp) + ' kg'} l={'per pallet (limit ' + r.maxKg + ')'} />
           </div>
         </>
       ) : (
@@ -108,7 +110,28 @@ function CarrierSection({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
           </tbody>
         </table>
       </div>
-      {rec.priority === 'Balanced' ? <p className="note">Balanced weighs cost 40%, speed 30% and reliability 30%.</p> : null}
+      {rec.priority === 'Balanced' ? <p className="note">Balanced weighs price, speed and reliability equally, across the carriers that can take this load. How it works is in “Rulebook and rate card” at the bottom of the page.</p> : null}
+    </div>
+  );
+}
+
+const iso = (d: string | null) => (d ? PF.dmy(d) : '—');
+function BookedSummary({ b, ev }: { b: any; ev: any }) {
+  const sel = ev.rec.selected, eta = b.readyDate ? PF.addDays(b.readyDate, sel.transit) : null;
+  const acked = (b._acks || []).length ? ev.issues.filter((i: any) => i.sev === 'amber' && (b._acks || []).includes(issueKey(i))) : [];
+  return (
+    <div className="confirmed" role="status">
+      <b>{'Booked. Reference ' + b._ref}</b>
+      <dl className="sheet" style={{ marginTop: 10 }}>
+        <div><dt>Route</dt><dd>{(b.originCity || 'UK') + ' to ' + (b.destCity || b.destCountry)}</dd></div>
+        <div><dt>Carrier</dt><dd>{sel.carrier + ' · ' + sel.service}</dd></div>
+        <div><dt>Pallets</dt><dd>{ev.rec.pallets}</dd></div>
+        <div><dt>Total price</dt><dd>{PF.gbp(sel.price * ev.rec.pallets) + ' (' + PF.gbp(sel.price) + ' × ' + ev.rec.pallets + ')'}</dd></div>
+        <div><dt>Collection</dt><dd>{iso(b.readyDate)}</dd></div>
+        <div><dt>Estimated delivery</dt><dd>{iso(eta) + ' (estimate: ' + plural(sel.transit, 'calendar day') + ' after collection)'}</dd></div>
+      </dl>
+      {acked.length ? <p style={{ margin: '8px 0 0' }}><b>Warnings you acknowledged:</b> {acked.map((i: any) => i.title + (i.item ? ' (' + i.item + ')' : '')).join('; ')}.</p> : null}
+      <p style={{ margin: '8px 0 0' }}>{b._saved === false ? 'This booking was checked but could not be saved to the booking log. ' : 'The booking is recorded under this reference. '}It has not been transmitted to a carrier.</p>
     </div>
   );
 }
@@ -116,6 +139,9 @@ function CarrierSection({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
 function Confirmation({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
   const s = PF.summarise(b, ev);
   const booked = !!b._ref;
+  const open = unacknowledged(b, ev);
+  const ambers = ev.issues.filter((i: any) => i.sev === 'amber');
+  const ready = canBook(b, ev);
   return (
     <div className="card section confirm">
       <h3>{booked ? 'Booked' : 'Book this shipment'}</h3>
@@ -123,17 +149,28 @@ function Confirmation({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
       {s.lines.map((l: string, i: number) => <p key={i}>{l}</p>)}
       <p className="muted" style={{ marginTop: 10 }}><b>What happens next</b></p>
       <ol>{s.next.map((n: string, i: number) => <li key={i}>{n}</li>)}</ol>
-      {booked ? (
-        <div className="confirmed" role="status">
-          <b>{'Booked with ' + ev.rec.selected.carrier + '. Reference ' + b._ref + '. '}</b>
-          {b._saved === false ? 'This booking was checked but could not be saved to the booking log. ' : 'The booking is recorded under this reference. '}
-          It has not been transmitted to a carrier.
-        </div>
-      ) : (
-        <div className="row-actions" style={{ margin: '14px 0 0' }}>
-          <button className="btn" disabled={ev.status === 'blocked' || opts.booking} onClick={opts.book}>{ev.status === 'blocked' ? 'Fix red items to book' : opts.booking ? 'Booking…' : 'Book shipment'}</button>
-          {ev.status === 'warning' ? <span className="note">You can book with warnings, but fixing them avoids delays.</span> : null}
-        </div>
+      {booked ? <BookedSummary b={b} ev={ev} /> : (
+        <>
+          {ev.status !== 'blocked' && ambers.length ? (
+            <div className="acks">
+              <p style={{ margin: '0 0 6px' }}><b>Acknowledge each warning to book</b></p>
+              {ambers.map((i: any) => {
+                const k = issueKey(i), on = (b._acks || []).includes(k);
+                return (
+                  <label key={k} className="ack">
+                    <input type="checkbox" checked={on} onChange={e => opts.ack(e.target.checked ? [...(b._acks || []), k] : (b._acks || []).filter((x: string) => x !== k))} />
+                    <span>{'I understand: ' + i.title + (i.item ? ' (' + i.item + ')' : '')}</span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : null}
+          <div className="row-actions" style={{ margin: '14px 0 0' }}>
+            <button className="btn" disabled={!ready || opts.booking} onClick={opts.book}>
+              {ev.status === 'blocked' ? 'Fix red items to book' : open.length ? 'Acknowledge the warnings to book' : opts.booking ? 'Booking…' : 'Book shipment'}
+            </button>
+          </div>
+        </>
       )}
       {b._bookError ? <div className="bookerr" role="alert">{b._bookError}</div> : null}
     </div>
@@ -146,9 +183,10 @@ function FixProgress({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
   const pct = startN === 0 ? 100 : Math.max(0, Math.min(100, Math.round((1 - nowN / startN) * 100)));
   const booked = !!b._ref;
   const blocked = ev.status === 'blocked';
+  const ready = canBook(b, ev);
   const text = booked ? 'This booking has been booked.'
     : blocked ? 'Fix the ' + plural(ev.counts.red, 'red problem') + ' below, then you can book this shipment.'
-    : ev.status === 'warning' ? 'No red problems left. You can book now, or fix the ' + plural(ev.counts.amber, 'warning') + ' first to avoid delays.'
+    : ev.status === 'warning' ? 'No red problems left. Fix the ' + plural(ev.counts.amber, 'warning') + ' to avoid delays, or acknowledge ' + (ev.counts.amber === 1 ? 'it' : 'each one') + ' below and book anyway.'
     : 'All ten rules pass. This shipment is ready to book.';
   return (
     <div className="card section fixprog">
@@ -157,7 +195,7 @@ function FixProgress({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
       <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Problems resolved"><i style={{ width: pct + '%' }} /></div>
       <p className="note" style={{ margin: 0 }}>{'Started with ' + plural(start.counts.red, 'red problem') + ' and ' + plural(start.counts.amber, 'amber warning') + '. Now ' + ev.counts.red + ' red and ' + ev.counts.amber + ' amber.'}</p>
       <div className="row-actions">
-        {!booked ? <button className="btn" disabled={blocked || opts.booking} onClick={opts.book}>{opts.booking ? 'Booking…' : 'Book shipment'}</button> : null}
+        {!booked ? <button className="btn" disabled={!ready || opts.booking} onClick={opts.book}>{opts.booking ? 'Booking…' : 'Book shipment'}</button> : null}
         {hasChanges(b) && !booked ? <button className="btn ghost small" onClick={opts.reset}>Reset to original</button> : null}
       </div>
     </div>
@@ -194,7 +232,7 @@ export function SheetCard({ b, title, showProgress }: { b: any; title: string; s
             <thead><tr>{['Product', 'Units', '£ per unit', 'Per carton', 'Cartons', 'kg each', 'HS code', 'Made in'].map((t, i) => <th key={t} className={i >= 1 && i <= 5 ? 'num' : ''}>{t}</th>)}</tr></thead>
             <tbody>{b.items.map((i: any, n: number) => (
               <tr key={n}>
-                <td>{i.desc || '—'}{i.sku ? <div className="note">{i.sku}</div> : null}</td>
+                <td>{i.desc || '—'}<div className="note">{'SKU ' + (i.sku || '—')}</div></td>
                 <td className="num">{i.qty != null ? i.qty.toLocaleString('en-GB') : '—'}</td><td className="num">{i.price != null ? PF.gbp(i.price) : '—'}</td>
                 <td className="num">{i.upc != null ? i.upc : '—'}</td><td className="num">{i.cartons != null ? i.cartons : '—'}</td><td className="num">{i.unitWeight != null ? i.unitWeight : '—'}</td>
                 <td>{i.hs != null && i.hs !== '' ? String(i.hs) : (i.skipHS ? 'blank' : '—')}</td><td>{i.coo || (i.skipCOO ? 'blank' : '—')}</td>
@@ -280,6 +318,7 @@ export type UploadHandlers = {
   fix: (b: any, s: Spec) => void;
   book: (b: any) => void;
   reset: (b: any) => void;
+  ack: (b: any, keys: string[]) => void;
   bookAllClear: () => void;
   download: () => void;
   busy: boolean;
@@ -298,7 +337,8 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
   }
   if (upload.error) return <div className="card section"><h3>I couldn’t read that file</h3><p>{upload.error}</p></div>;
   const evs = upload.bookings.map((b: any) => ({ b, ev: PF.evaluate(b) }));
-  const cur = sel ? evs.find((x: any) => x.b.id === sel) : null;
+  const uid = (b: any) => String(b._uid ?? b.id);
+  const cur = sel ? evs.find((x: any) => uid(x.b) === sel) : null;
   if (cur) {
     const idx = evs.indexOf(cur);
     return (
@@ -307,12 +347,12 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
           <button className="btn small ghost" onClick={() => setSel(null)}>Back to all bookings</button>
           <span className="note">{'Booking ' + (idx + 1) + ' of ' + evs.length}</span>
           <span>
-            <button className="btn small ghost" disabled={idx === 0} onClick={() => setSel(evs[idx - 1].b.id)}>Previous</button>{' '}
-            <button className="btn small ghost" disabled={idx === evs.length - 1} onClick={() => setSel(evs[idx + 1].b.id)}>Next</button>
+            <button className="btn small ghost" disabled={idx === 0} onClick={() => setSel(uid(evs[idx - 1].b))}>Previous</button>{' '}
+            <button className="btn small ghost" disabled={idx === evs.length - 1} onClick={() => setSel(uid(evs[idx + 1].b))}>Next</button>
           </span>
         </div>
         <Detail b={cur.b} aiOn={aiOn} thumpKey={thumpKey}
-          opts={{ fix: s => h.fix(cur.b, s), book: () => h.book(cur.b), reset: () => h.reset(cur.b), booking: h.busy }} />
+          opts={{ fix: s => h.fix(cur.b, s), book: () => h.book(cur.b), reset: () => h.reset(cur.b), booking: h.busy, ack: k => h.ack(cur.b, k) }} />
       </>
     );
   }
@@ -351,16 +391,17 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
       {(upload.warnings || []).map((w: string, i: number) => <div key={i} className="warnbox">{w}</div>)}
       <div className="scroll">
         <table>
-          <thead><tr>{['Booking', 'Seller', 'Route', 'Pallets', 'Recommended carrier', 'Status'].map((t, i) => <th key={t} className={i === 3 ? 'num' : ''}>{t}</th>)}</tr></thead>
+          <thead><tr>{['Booking', 'Seller', 'Route', 'Pallets', 'Problems', 'Recommended carrier', 'Status'].map((t, i) => <th key={t} className={i === 3 || i === 4 ? 'num' : ''}>{t}</th>)}</tr></thead>
           <tbody>
             {shown.map(({ b, ev }: any) => {
               const r = ev.rec, c = r.recommended;
-              const go = () => { setSel(b.id); window.scrollTo({ top: 0 }); };
+              const go = () => { setSel(uid(b)); window.scrollTo({ top: 0 }); };
               return (
-                <tr key={b.id} className="click" tabIndex={0} role="link" aria-label={'Open ' + b.id} onClick={go} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }}>
+                <tr key={uid(b)} className="click" tabIndex={0} role="link" aria-label={'Open ' + b.id} onClick={go} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }}>
                   <td><b>{b.id}</b>{b._ref ? <div className="note">{b._ref}</div> : null}</td><td>{b.seller || '—'}</td><td>{(b.originCity || '?') + ' to ' + (b.destCity || '?')}</td>
                   <td className="num">{b.pallets != null ? b.pallets : '—'}</td>
-                  <td>{c ? c.carrier + ', ' + PF.gbp(c.price * (r.pallets || 0)) : (r.error ? '—' : 'None fits')}</td>
+                  <td className="num">{ev.counts.red + ev.counts.amber}</td>
+                  <td>{c ? c.carrier + ', ' + (r.pallets ? PF.gbp(c.price * r.pallets) : '—') : (r.error ? '—' : 'None fits')}</td>
                   <td><StatusPills b={b} ev={ev} /></td>
                 </tr>
               );

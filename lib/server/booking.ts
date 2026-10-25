@@ -1,10 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { PF } from '../pf';
+import { issueKey } from '../fixes';
 
 export type BookingCheck =
   | { ok: true; ev: any; clean: any }
   | { ok: false; status: 422 | 400; error: string; red?: number; problems?: string[] };
 
+const KEEP = new Set(['_carrier', '_changes', '_acks', '_dupCount', '_dupLater', '_dupRows', '_row']);
 const todayUTC = () => new Date().toISOString().slice(0, 10);
 const dayDiff = (a: string, b: string) => Math.abs((Date.parse(a) - Date.parse(b)) / 86400000);
 
@@ -15,7 +17,7 @@ const dayDiff = (a: string, b: string) => Math.abs((Date.parse(a) - Date.parse(b
 export function checkBooking(input: any, clientToday?: string): BookingCheck {
   if (!input || typeof input !== 'object' || !Array.isArray(input.items)) return { ok: false, status: 400, error: 'bad_request' };
   // Keep only the data the engine reads, plus the chosen carrier and the correction log.
-  const clean: any = JSON.parse(JSON.stringify(input, (k, v) => (k.startsWith('_') && k !== '_carrier' && k !== '_changes' ? undefined : v)));
+  const clean: any = JSON.parse(JSON.stringify(input, (k, v) => (k.startsWith('_') && !KEEP.has(k) ? undefined : v)));
   // The client's "today" is accepted only within a day of the server's, to allow for time zones.
   const today = clientToday && /^\d{4}-\d{2}-\d{2}$/.test(clientToday) && dayDiff(clientToday, todayUTC()) <= 1 ? clientToday : todayUTC();
   let ev: any;
@@ -23,6 +25,10 @@ export function checkBooking(input: any, clientToday?: string): BookingCheck {
   if (ev.status === 'blocked') {
     return { ok: false, status: 422, error: 'blocked', red: ev.counts.red, problems: ev.issues.filter((i: any) => i.sev === 'red').map((i: any) => i.title) };
   }
+  // Warnings do not block a booking, but each one must have been acknowledged by the seller.
+  const acks = new Set(Array.isArray(clean._acks) ? clean._acks : []);
+  const open = ev.issues.filter((i: any) => i.sev === 'amber' && !acks.has(issueKey(i)));
+  if (open.length) return { ok: false, status: 422, error: 'warnings_not_acknowledged', problems: open.map((i: any) => i.title) };
   return { ok: true, ev, clean };
 }
 

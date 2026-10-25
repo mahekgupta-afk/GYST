@@ -16,19 +16,26 @@ describe('server booking gate', () => {
   it('accepts a clear booking', () => {
     expect(checkBooking(get('BK-001')).ok).toBe(true);
   });
-  it('accepts a booking that has only amber warnings', () => {
-    const r: any = checkBooking(get('BK-010'));
-    expect(r.ok).toBe(true);
-    expect(r.ev.counts.amber).toBeGreaterThan(0);
+  it('refuses a booking with warnings until each one is acknowledged, then accepts it', () => {
+    const b = get('BK-010');
+    const r: any = checkBooking(b);
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe('warnings_not_acknowledged');
+    b._acks = PF.evaluate(b).issues.filter((i: any) => i.sev === 'amber').map((i: any) => [i.rule, i.item || '', i.title].join('|'));
+    const r2: any = checkBooking(b);
+    expect(r2.ok).toBe(true);
+    expect(r2.ev.counts.amber).toBeGreaterThan(0);
   });
   it('cannot be fooled by fake status fields sent by the browser', () => {
-    const b = get('BK-006');
-    b._confirmed = true; b.status = 'clear'; b._edited = false;
+    const b = get('BK-007');   // 900 kg on one pallet: no carrier can take it
+    b._confirmed = true; b.status = 'clear'; b._edited = false; b._ref = 'GYST-FAKE';
     expect(checkBooking(b).ok).toBe(false);
   });
   it('still judges R-05 against the carrier the user chose', () => {
     const b = get('BK-006');
-    expect(checkBooking(b).ok).toBe(false);     // Carrier C is over its limit
+    expect(checkBooking(b).ok).toBe(true);      // recommended Carrier B can take 500 kg per pallet
+    b._carrier = 'Carrier C';                   // the user picks a carrier that can't (400 kg limit)
+    expect(checkBooking(b).ok).toBe(false);
     b._carrier = 'Carrier B';
     expect(checkBooking(b).ok).toBe(true);
   });

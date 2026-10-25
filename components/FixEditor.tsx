@@ -96,8 +96,11 @@ export function QuickFix({ issue, b, ev, fix }: { issue: any; b: any; ev: any; f
     const sel = rec.selected;
     body = (<>
       <div className="fixrow">
+        {!rec.recommended ? rec.options.slice().sort((x: any, y: any) => x.minCost - y.minCost).map((o: any) => (
+          <Btn key={o.carrier} ghost={o !== rec.options.slice().sort((x: any, y: any) => x.minCost - y.minCost)[0]} onClick={() => { fix({ kind: 'carrier', carrier: o.carrier, rule }); fix({ kind: 'set', field: 'pallets', value: o.minPallets, rule }); }}>{'Use ' + o.minPallets + ' pallets with ' + o.carrier + ' (' + gbp(o.minCost) + ')'}</Btn>
+        )) : null}
         {rec.recommended && rec.recommended.carrier !== sel.carrier ? <Btn onClick={() => fix({ kind: 'carrier', carrier: rec.recommended.carrier, rule })}>{'Switch to ' + rec.recommended.carrier + ' (' + gbp(rec.recommended.price * rec.pallets) + ')'}</Btn> : null}
-        {sel.minPallets && sel.minPallets !== b.pallets ? <Btn ghost onClick={() => fix({ kind: 'set', field: 'pallets', value: sel.minPallets, rule })}>{'Use ' + sel.minPallets + ' pallets with ' + sel.carrier + ' (' + gbp(sel.minCost) + ')'}</Btn> : null}
+        {rec.recommended && sel.minPallets && sel.minPallets !== b.pallets ? <Btn ghost onClick={() => fix({ kind: 'set', field: 'pallets', value: sel.minPallets, rule })}>{'Use ' + sel.minPallets + ' pallets with ' + sel.carrier + ' (' + gbp(sel.minCost) + ')'}</Btn> : null}
       </div>
       <NumField label="Or set the number of pallets" cta="Set pallets" step="1" min={1} onApply={n => fix({ kind: 'set', field: 'pallets', value: Math.round(n), rule })} />
     </>);
@@ -185,7 +188,7 @@ export function EditableSheet({ b, ev, fix, title }: { b: any; ev: any; fix: Fix
               const f = itemFlags(it);
               return (
                 <tr key={i}>
-                  <td>{it.desc || '—'}{it.sku ? <div className="note">{it.sku}</div> : null}</td>
+                  <td>{it.desc || '—'}<div className="note">{'SKU ' + (it.sku || '—')}</div></td>
                   <td><Cell value={it.hs} flag={f.hs} inputMode="text" onCommit={raw => fix({ kind: 'set', field: 'hs', value: raw === '' ? null : raw.replace(/[\s.-]/g, ''), itemIndex: i, rule: 'Manual edit' })} /></td>
                   {NUM_ITEM.map(([k]) => <td key={k}><Cell value={it[k]} flag={typeof it[k] !== 'number' || (f.cartonMath && (k === 'qty' || k === 'upc' || k === 'cartons'))} onCommit={raw => setNum(k, i, raw)} /></td>)}
                   <td>

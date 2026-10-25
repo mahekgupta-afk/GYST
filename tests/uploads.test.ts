@@ -12,7 +12,7 @@ describe('server-side upload analysis (what gets stored in Neon)', () => {
     expect(a.red + a.amber + a.clear).toBe(14);
     expect(a.red).toBeGreaterThan(0);
     expect(a.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(a.results.find((r: any) => r.id === 'BK-006').issues.map((i: any) => i.rule)).toContain('R-05');
+    expect(a.results.find((r: any) => r.id === 'BK-007').issues.map((i: any) => i.rule)).toContain('R-05');
   });
   it('gives the same hash for the same bytes', () => {
     expect((analyse('a.xlsx', planted) as any).sha256).toBe((analyse('b.xlsx', planted) as any).sha256);

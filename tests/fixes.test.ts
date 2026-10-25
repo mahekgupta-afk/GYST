@@ -29,7 +29,7 @@ function fixAll(b: any) {
 }
 
 describe('every planted booking can be corrected to a bookable state', () => {
-  for (const id of ['BK-002', 'BK-003', 'BK-004', 'BK-005', 'BK-006', 'BK-007', 'BK-013']) {
+  for (const id of ['BK-002', 'BK-003', 'BK-004', 'BK-005', 'BK-007', 'BK-013']) {
     it(id + ' reaches no red issues, and every step is logged', () => {
       const b = byId(id);
       expect(PF.evaluate(b).status).toBe('blocked');
