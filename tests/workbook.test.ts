@@ -22,3 +22,24 @@ describe('real xlsx upload (same path the browser uses)', () => {
     expect(rulesOf('BK-014')).toHaveLength(0);
   });
 });
+
+describe('blank template (the download offered in the UI)', () => {
+  const build = (extraBooking?: any[], extraItem?: any[]) => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bookings: one row per shipment. Enter data from row 3.'], PF.BH, ...(extraBooking ? [extraBooking] : [])]), 'Bookings');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Items: one row per product in a booking. Enter data from row 3.'], PF.IH, ...(extraItem ? [extraItem] : [])]), 'Items');
+    const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    return out as ArrayBuffer;
+  };
+  it('an empty template parses to zero bookings, not a crash', () => {
+    const r = PF.parseWorkbook(XLSX, build());
+    expect(r.error || r.bookings.length === 0).toBeTruthy();
+  });
+  it('a filled-in template is read and checked', () => {
+    const r = PF.parseWorkbook(XLSX,
+      build(['BK-101', 'Acme Ltd', 'London', 'United Kingdom', 'Paris', 'France', 'Warehouse', '01-12-2030', 'Cheapest', 1, 10, 100, 'GBP', 50, 'Yes'],
+            ['BK-101', 'SKU1', 'Wooden spoons', '441900', 100, 1, 10, 10, 0.4, 'Vietnam']));
+    expect(r.bookings).toHaveLength(1);
+    expect(PF.evaluate(r.bookings[0]).status).toBe('clear');
+  });
+});

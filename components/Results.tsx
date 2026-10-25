@@ -131,7 +131,7 @@ function Confirmation({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
       <p className="muted" style={{ marginTop: 10 }}><b>What happens next</b></p>
       <ol>{s.next.map((n: string, i: number) => <li key={i}>{n}</li>)}</ol>
       {b._confirmed && ev.status !== 'blocked' ? (
-        <div className="confirmed" role="status"><b>{'Booking ' + b.id + ' confirmed with ' + ev.rec.selected.carrier + '. '}</b>This is a demo, so nothing is sent to a real carrier.</div>
+        <div className="confirmed" role="status"><b>{'Booking ' + b.id + ' confirmed with ' + ev.rec.selected.carrier + '. '}</b>This booking is recorded here and has not been sent to a carrier yet.</div>
       ) : (
         <div className="row-actions" style={{ margin: '14px 0 0' }}>
           <button className="btn" disabled={ev.status === 'blocked'} onClick={() => opts.change(() => { b._confirmed = true; }, 'Booking confirmed.')}>{ev.status === 'blocked' ? 'Fix red items to confirm' : 'Confirm booking'}</button>
@@ -184,13 +184,13 @@ function Advisory({ b }: { b: any }) {
   };
   return (
     <div className="card section">
-      <h3>Second opinion on item descriptions</h3>
-      <div className="note">The rulebook check looks for known words. Gemini can read the descriptions for restricted goods that don’t use those words, such as devices with built-in batteries.</div>
-      <button className="btn small ghost" style={{ marginTop: 10 }} disabled={busy} onClick={ask}>{busy ? 'Asking Gemini…' : out ? 'Ask again' : 'Ask Gemini to double-check'}</button>
+      <h3>Extra screening of item descriptions</h3>
+      <div className="note">The rulebook check looks for known words. Extra screening reads the descriptions for restricted goods that don’t use those words, such as devices with built-in batteries.</div>
+      <button className="btn small ghost" style={{ marginTop: 10 }} disabled={busy} onClick={ask}>{busy ? 'Screening…' : out ? 'Screen again' : 'Run extra screening'}</button>
       {out && (
         <div className="adv">
-          {out.error ? <p>Couldn’t get a second opinion this time.</p>
-            : !out.flagged?.length ? <p>Gemini found nothing else that looks restricted.</p>
+          {out.error ? <p>Extra screening isn’t available right now. The ten rulebook checks above are unaffected.</p>
+            : !out.flagged?.length ? <p>Nothing else looks restricted.</p>
             : <>{out.flagged.map((x, i) => <p key={i}><b>{x.sku + ': '}</b>{x.concern}</p>)}<p className="note">These are advisory and not part of the ten rules.</p></>}
         </div>
       )}
@@ -239,9 +239,9 @@ export function UploadResults({ upload, sel, setSel, bump, thumpKey, aiOn }: { u
   if (!upload) {
     return (
       <div className="card empty">
-        <h2>Check a whole file in one go</h2>
+        <h2>Check your bookings</h2>
         <p>Upload your Bookings and Items sheets. Every booking is checked against the ten rules and gets a carrier recommendation, with a plain explanation for anything that’s wrong.</p>
-        <p>No file to hand? Use the built-in sample on the left.</p>
+        <p>Need the format? Download the blank template on the left.</p>
       </div>
     );
   }

@@ -5,8 +5,6 @@ import { Detail, SheetCard, UploadResults, plural } from './Results';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
 const sig = (c: any) => JSON.stringify(Object.assign({}, c.b, { _confirmed: undefined }));
-const exampleText = () =>
-  'I’m Northfield Goods. I’m sending 1,080 ceramic mugs from Manchester to a warehouse in Frankfurt, 3 pallets, ready on ' + PF.dmy(PF.addDays(PF.todayISO(), 10)) + '. They’re £5 each, 12 per carton and weigh 0.5 kg each.';
 const GREETING = 'Hi, I’m your booking assistant. Tell me about the shipment in your own words and I’ll ask only for what’s missing. Then I’ll check it against the rulebook and recommend a carrier.\nI book from London, Manchester, Birmingham or Leeds to Germany, France or the Netherlands.';
 
 export default function App() {
@@ -15,7 +13,6 @@ export default function App() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [busy, setBusy] = useState(false);
   const [aiOn, setAiOn] = useState(false);
-  const [aiAvail, setAiAvail] = useState(false);
   const [upload, setUpload] = useState<any>(null);
   const [sel, setSelState] = useState<string | null>(null);
   const [thumpKey, setThumpKey] = useState(0);
@@ -27,7 +24,6 @@ export default function App() {
   const chat = useRef<any>(C.newChat());
   const prev = useRef<{ red: number; amber: number } | null>(null);
   const msgsRef = useRef<Msg[]>([]);
-  const noticed = useRef(false);
   const logEl = useRef<HTMLDivElement>(null);
   const inputEl = useRef<HTMLTextAreaElement>(null);
   const fileEl = useRef<HTMLInputElement>(null);
@@ -39,14 +35,14 @@ export default function App() {
 
   const greet = useCallback(() => {
     chat.current = C.newChat(); prev.current = null;
-    setM([{ role: 'bot', text: GREETING, chips: ['Try an example'] }]);
+    setM([{ role: 'bot', text: GREETING, chips: null }]);
     bump();
   }, []);
 
   useEffect(() => {
     setToday('Checking against today, ' + PF.niceDate(PF.todayISO()));
     greet();
-    fetch('/api/parse-message').then(r => r.json()).then(j => { if (j && j.enabled) { setAiAvail(true); setAiOn(true); } }).catch(() => {});
+    fetch('/api/parse-message').then(r => r.json()).then(j => { if (j && j.enabled) { setAiOn(true); } }).catch(() => {});
   }, [greet]);
 
   useEffect(() => { const el = logEl.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs]);
@@ -89,7 +85,7 @@ export default function App() {
     const r = ev.rec;
     if (r.recommended) text += '\nRecommended carrier: ' + r.recommended.carrier + ' (' + r.recommended.service + '), ' + PF.gbp(r.recommended.price * r.pallets) + '.';
     else text += '\nNo carrier can take this weight per pallet. See the fix on the right.';
-    text += '\nYou can change anything, for example “add a pallet”.';
+    text += '\nYou can change any detail, for example “add a pallet”.';
     prev.current = { red: ev.counts.red, amber: ev.counts.amber };
     return { text, chips: completeChips(ev) };
   }
@@ -106,7 +102,6 @@ export default function App() {
     const text = (textIn !== undefined ? textIn : input).trim();
     if (!text || busy) return;
     setInput('');
-    if (text === 'Try an example') return send(exampleText());
     if (/^\s*(start over|start a new booking|new booking|reset)\b/i.test(text)) { say('user', text); greet(); return; }
     say('user', text);
     setBusy(true);
@@ -125,11 +120,7 @@ export default function App() {
         popMsg();
         chat.current = C.cloneChat(snap);
         log = null;
-        if (e && e.status === 503) { setAiOn(false); setAiAvail(false); }
-        if (!noticed.current && e && (e.status === 503 || e.status === 429)) {
-          noticed.current = true;
-          say('bot', 'I’ll read your messages with the built-in parser for now. Everything still works.');
-        }
+        if (e && e.status === 503) setAiOn(false);
       }
     }
     if (!log) log = C.step(chat.current, text, {});
@@ -170,10 +161,14 @@ export default function App() {
     form.append('file', file);
     fetch('/api/uploads', { method: 'POST', body: form }).catch(() => {});
   }
-  function loadSample() {
-    const t = PF.sampleTables(PF.todayISO());
-    const res = PF.bookingsFromTables(t.bookingRows, t.itemRows);
-    showUpload({ fileName: 'Sample bookings (built in)', bookings: res.bookings, warnings: res.warnings });
+  /** Blank workbook in the template format, so users can see the expected sheets and columns. */
+  async function downloadTemplate() {
+    const mod: any = await import('xlsx');
+    const X = mod.default ?? mod;
+    const wb = X.utils.book_new();
+    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Bookings: one row per shipment. Enter data from row 3.'], PF.BH]), 'Bookings');
+    X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet([['Items: one row per product in a booking. Enter data from row 3.'], PF.IH]), 'Items');
+    X.writeFile(wb, 'preflight-template.xlsx');
   }
   const setSel = (id: string | null) => { setSelState(id); thump(); };
 
@@ -194,7 +189,7 @@ export default function App() {
         <section className="card left" aria-label="Start a booking">
           <div className="tabs" role="tablist">
             <button className="tab" role="tab" id="tab-chat" aria-selected={mode === 'chat'} aria-controls="pane-chat" onClick={() => setMode('chat')}>Chat to book</button>
-            <button className="tab" role="tab" id="tab-upload" aria-selected={mode === 'upload'} aria-controls="pane-upload" onClick={() => setMode('upload')}>Check a file</button>
+            <button className="tab" role="tab" id="tab-upload" aria-selected={mode === 'upload'} aria-controls="pane-upload" onClick={() => setMode('upload')}>Upload a file</button>
           </div>
           <div className={'pane' + (mode === 'chat' ? ' on' : '')} id="pane-chat" role="tabpanel" aria-labelledby="tab-chat">
             <div className="log" ref={logEl} role="log" aria-live="polite">
@@ -210,14 +205,7 @@ export default function App() {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
               <button className="btn" disabled={busy} onClick={() => send()}>Send</button>
-              <div className="aibar">
-                {aiAvail ? (
-                  <>
-                    <span>{aiOn ? 'Gemini is helping read your messages.' : 'Using the built-in message reader.'}</span>
-                    <button className="linkbtn" onClick={() => setAiOn(v => !v)}>{aiOn ? 'Turn off' : 'Turn on Gemini'}</button>
-                  </>
-                ) : <span>Say “start over” at any time to begin a new booking.</span>}
-              </div>
+              <div className="aibar"><span>Say “start over” at any time to begin a new booking.</span></div>
             </div>
           </div>
           <div className={'pane' + (mode === 'upload' ? ' on' : '')} id="pane-upload" role="tabpanel" aria-labelledby="tab-upload">
@@ -232,10 +220,8 @@ export default function App() {
                 <input ref={fileEl} type="file" accept=".xlsx,.xls,.xlsm,.ods" className="sr" tabIndex={-1} aria-label="Upload booking file"
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
               </div>
-              <div className="sep">or</div>
-              <button className="btn ghost" onClick={loadSample}>Try the built-in sample bookings</button>
-              <p className="note">The sample has 14 bookings. Each one breaks a different rule so you can see how problems are explained. Dates are set relative to today.</p>
-              <p className="note">Files you upload are saved so we can review how the checker handles real sheets.</p>
+              <button className="linkbtn" onClick={downloadTemplate}>Download the blank template (.xlsx)</button>
+              <p className="note">Uploaded files are stored securely so we can review how your sheets were checked.</p>
               <div className="note" role="status">{uploadMsg}</div>
             </div>
           </div>
