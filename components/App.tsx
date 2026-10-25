@@ -5,7 +5,7 @@ import { Detail, SheetCard, UploadResults, plural } from './Results';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
 const sig = (c: any) => JSON.stringify(Object.assign({}, c.b, { _confirmed: undefined }));
-const GREETING = 'Hi, I’m your booking assistant. Tell me about the shipment in your own words and I’ll ask only for what’s missing. Then I’ll check it against the rulebook and recommend a carrier.\nI book from London, Manchester, Birmingham or Leeds to Germany, France or the Netherlands.';
+const GREETING = 'Let’s get your shipment sorted. Tell me what you’re sending, in your own words, and I’ll only ask about what’s missing.\nOnce I have it, I’ll check the paperwork before it leaves and recommend the right carrier.\nI cover collections from London, Manchester, Birmingham and Leeds to Germany, France and the Netherlands.';
 
 export default function App() {
   const [, bump] = useReducer((n: number) => n + 1, 0);
