@@ -28,9 +28,9 @@ const sendChat = async (text: string) => {
 };
 
 describe('header navigation', () => {
-  it('keeps the existing label and the Light/Dark switch', () => {
+  it('shows the GYST Shipments label and the Light/Dark switch', () => {
     render(<App />);
-    expect(within(nav()).getByText('UK to EU shipments')).toBeTruthy();
+    expect(within(nav()).getByText('GYST Shipments')).toBeTruthy();
     expect(within(nav()).getByRole('button', { name: /Light/ })).toBeTruthy();
     expect(within(nav()).getByRole('button', { name: /Dark/ })).toBeTruthy();
   });

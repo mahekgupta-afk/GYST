@@ -93,6 +93,10 @@ Layout only. Team cards have a fixed, even width instead of stretching across th
 
 About is now in the left group of the header, directly after Carrier options, styled like its neighbours; the right cluster is New booking and the Light/Dark switch (the phone Menu is unchanged, About last). An earlier change that put the About section beside the Carrier options section on the page was a misreading and has been reverted: the page order is again Carrier options, Rulebook, About. The team section ("The team" and the two partner cards) stays removed. The Light/Dark switch text is 11px (was 13px) with smaller icons and padding. The header highlight follows the section most recently scrolled past. Proved by: `tests/nav.test.tsx` (About immediately after Carrier options, switch rightmost, tab order), `tests/about.test.tsx` (no team content, About last on the page) and a browser check at 1280px (one-row header) and 1000px (the header wraps to two rows, no horizontal scroll).
 
+## Header label
+
+The label next to the logo in the header now reads "GYST Shipments" (was "UK to EU shipments"). Text only.
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.
