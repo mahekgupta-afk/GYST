@@ -6,7 +6,7 @@ import { QuickFix, EditableSheet } from './FixEditor';
 import { fetchJson } from '@/lib/net';
 
 export const plural = (n: number, w: string, p?: string) => n + ' ' + (n === 1 ? w : p || w + 's');
-export type Opts = { fix: (s: Spec) => ApplyResult | void; book: () => void; reset: () => void; booking: boolean; ack: (keys: string[]) => void };
+export type Opts = { fix: (s: Spec) => ApplyResult | void; book: () => void; reset: () => void; booking: boolean; ack: (keys: string[]) => void; example?: boolean };
 
 /* ---------- shared pieces ---------- */
 function RuleStrip({ ev }: { ev: any }) {
@@ -171,8 +171,8 @@ function Confirmation({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
           ) : null}
           {pastDate && ev.status !== 'blocked' ? <div className="warnbox" role="note" style={{ marginTop: 12 }}>The ready date is in the past (R-10). It’s a warning, but this booking can’t be made until you change the date to today or later.</div> : null}
           <div className="row-actions" style={{ margin: '14px 0 0' }}>
-            <button className="btn" disabled={!ready || opts.booking} onClick={opts.book}>
-              {ev.status === 'blocked' ? 'Fix red items to book' : pastDate ? 'Fix the date to book' : open.length ? 'Acknowledge the warnings to book' : opts.booking ? 'Booking…' : 'Book shipment'}
+            <button className="btn" disabled={!ready || opts.booking || opts.example} onClick={opts.book}>
+              {opts.example ? 'Example only: booking is off' : ev.status === 'blocked' ? 'Fix red items to book' : pastDate ? 'Fix the date to book' : open.length ? 'Acknowledge the warnings to book' : opts.booking ? 'Booking…' : 'Book shipment'}
             </button>
           </div>
         </>
@@ -201,7 +201,7 @@ function FixProgress({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
       <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Problems resolved"><i style={{ width: pct + '%' }} /></div>
       <p className="note" style={{ margin: 0 }}>{'Started with ' + plural(start.counts.red, 'red problem') + ' and ' + plural(start.counts.amber, 'amber warning') + '. Now ' + ev.counts.red + ' red and ' + ev.counts.amber + ' amber.'}</p>
       <div className="row-actions">
-        {!booked ? <button className="btn" disabled={!ready || opts.booking} onClick={opts.book}>{opts.booking ? 'Booking…' : 'Book shipment'}</button> : null}
+        {!booked ? <button className="btn" disabled={!ready || opts.booking || opts.example} onClick={opts.book}>{opts.example ? 'Example only: booking is off' : opts.booking ? 'Booking…' : 'Book shipment'}</button> : null}
         {hasChanges(b) && !booked ? <button className="btn ghost small" onClick={opts.reset}>Reset to original</button> : null}
       </div>
     </div>
@@ -334,6 +334,7 @@ export type UploadHandlers = {
   download: () => void;
   busy: boolean;
   bulk: { done: number; total: number } | null;
+  clearExample: () => void;
 };
 
 export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey, aiOn, h }: { upload: any; sel: string | null; setSel: (id: string | null) => void; filter: string; setFilter: (f: string) => void; thumpKey: number; aiOn: boolean; h: UploadHandlers }) {
@@ -347,6 +348,12 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
     );
   }
   if (upload.error) return <div className="card section"><h3>I couldn’t read that file</h3><p>{upload.error}</p></div>;
+  const banner = upload.example ? (
+    <div className="card section examplebar" role="status">
+      <span><b>Example data, not your file.</b> <span className="note">Built in your browser, never stored or sent anywhere. Booking is switched off.</span></span>
+      <button type="button" className="btn small ghost" onClick={h.clearExample}>Clear example</button>
+    </div>
+  ) : null;
   const evs = upload.bookings.map((b: any) => ({ b, ev: PF.evaluate(b) }));
   const uid = (b: any) => String(b._uid ?? b.id);
   const cur = sel ? evs.find((x: any) => uid(x.b) === sel) : null;
@@ -354,6 +361,7 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
     const idx = evs.indexOf(cur);
     return (
       <>
+        {banner}
         <div className="row-actions">
           <button className="btn small ghost" onClick={() => setSel(null)}>Back to all bookings</button>
           <span className="note">{'Booking ' + (idx + 1) + ' of ' + evs.length}</span>
@@ -363,7 +371,7 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
           </span>
         </div>
         <Detail b={cur.b} aiOn={aiOn} thumpKey={thumpKey}
-          opts={{ fix: s => h.fix(cur.b, s), book: () => h.book(cur.b), reset: () => h.reset(cur.b), booking: h.busy, ack: k => h.ack(cur.b, k) }} />
+          opts={{ fix: s => h.fix(cur.b, s), book: () => h.book(cur.b), reset: () => h.reset(cur.b), booking: h.busy, ack: k => h.ack(cur.b, k), example: !!upload.example }} />
       </>
     );
   }
@@ -381,6 +389,8 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
     ['booked', 'booked', count('booked'), 'booked'],
   ];
   return (
+    <>
+    {banner}
     <div className="card section">
       <div className="row-actions"><h3 style={{ margin: 0 }}>{upload.fileName}</h3></div>
       <div className="tiles" role="group" aria-label="Filter bookings by status">
@@ -392,8 +402,8 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
         ))}
       </div>
       <div className="row-actions" style={{ margin: '4px 0 14px' }}>
-        <button className="btn" disabled={!clearToBook || h.busy} onClick={h.bookAllClear}>
-          {h.bulk ? 'Booking ' + (h.bulk.done + 1) + ' of ' + h.bulk.total + '…' : 'Book all clear (' + clearToBook + ')'}
+        <button className="btn" disabled={!clearToBook || h.busy || !!upload.example} onClick={h.bookAllClear}>
+          {upload.example ? 'Booking is off for the example' : h.bulk ? 'Booking ' + (h.bulk.done + 1) + ' of ' + h.bulk.total + '…' : 'Book all clear (' + clearToBook + ')'}
         </button>
         <button className="btn small ghost" onClick={h.download}>{anyChanges ? 'Download corrected file (.xlsx)' : 'Download results (.xlsx)'}</button>
         <button className="btn small ghost" onClick={() => exportCSV(upload.bookings)}>Download issue list (CSV)</button>
@@ -423,5 +433,6 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
       {!shown.length ? <p className="note" style={{ marginTop: 10 }}>No bookings in this group.</p> : null}
       <p className="note" style={{ marginTop: 10 }}>{(filter === 'all' ? '' : 'Showing ' + shown.length + ' of ' + evs.length + '. ') + 'Select a booking to see what’s wrong, fix it, and book it.'}</p>
     </div>
+    </>
   );
 }

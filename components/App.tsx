@@ -5,7 +5,10 @@ import { Detail, SheetCard, UploadResults, plural, type UploadHandlers } from '.
 import { applyChange, resetBooking, correctedRows, unacknowledged, issueKey, type Spec } from '@/lib/fixes';
 import { bookShipment } from '@/lib/bookingClient';
 import { fetchJson } from '@/lib/net';
-import ThemeToggle from './ThemeToggle';
+import { parseExample } from '@/lib/example';
+import Nav, { type NavKey } from './Nav';
+import About from './About';
+import CarrierOptions, { type UseDetails } from './CarrierOptions';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
 const sig = (c: any) => JSON.stringify(Object.assign({}, c.b, { _confirmed: undefined }));
@@ -26,6 +29,9 @@ export default function App() {
   const [saveNote, setSaveNote] = useState('');
   const [drag, setDrag] = useState(false);
   const [input, setInput] = useState('');
+  const [focusChat, setFocusChat] = useState(0);
+  const [section, setSection] = useState<'app' | 'carriers' | 'rulebook' | 'about'>('app');
+  const rulebookEl = useRef<HTMLDetailsElement>(null);
 
   const [bookBusy, setBookBusy] = useState(false);
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
@@ -56,10 +62,15 @@ export default function App() {
   }, [greet]);
 
   // The chat panel is sized to the space left under the header, so the message box is on screen when the page opens.
+  // --nav-h is the sticky bar's height: scroll targets and the sticky chat panel leave that much room at the top.
   useEffect(() => {
-    const hero = document.querySelector('.hero') as HTMLElement | null;
-    if (!hero) return;
-    const set = () => { const el = document.querySelector('.hero') as HTMLElement | null; if (el) document.documentElement.style.setProperty('--chrome', Math.ceil(el.getBoundingClientRect().height) + 84 + 'px'); };
+    const set = () => {
+      const nav = document.querySelector('.topnav') as HTMLElement | null, hero = document.querySelector('.hero') as HTMLElement | null;
+      if (!nav || !hero) return;
+      const nh = Math.ceil(nav.getBoundingClientRect().height);
+      document.documentElement.style.setProperty('--nav-h', nh + 'px');
+      document.documentElement.style.setProperty('--chrome', nh + Math.ceil(hero.getBoundingClientRect().height) + 84 + 'px');
+    };
     set();
     const raf = requestAnimationFrame(() => requestAnimationFrame(set));
     const late = window.setTimeout(set, 400);
@@ -67,9 +78,27 @@ export default function App() {
     window.addEventListener('resize', set);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(set).catch(() => {});
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(set);
-    if (ro) { ro.observe(hero); const nav = hero.firstElementChild; if (nav) ro.observe(nav); }
+    if (ro) document.querySelectorAll('.topnav, .hero').forEach(el => ro.observe(el));
     return () => { cancelAnimationFrame(raf); clearTimeout(late); window.removeEventListener('load', set); window.removeEventListener('resize', set); if (ro) ro.disconnect(); };
   }, []);
+  // Which part of the page is in view, for the header's active state.
+  useEffect(() => {
+    let queued = false;
+    const spy = () => {
+      if (queued) return; queued = true;
+      window.setTimeout(() => {
+        queued = false;
+        const line = (parseFloat(document.documentElement.style.getPropertyValue('--nav-h')) || 64) + 120;
+        let at: 'app' | 'carriers' | 'rulebook' | 'about' = 'app';
+        for (const id of ['carriers', 'rulebook', 'about'] as const) { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top <= line) at = id; }
+        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4 && document.getElementById('about')) at = 'about';
+        setSection(at);
+      }, 60);
+    };
+    window.addEventListener('scroll', spy, { passive: true });
+    return () => window.removeEventListener('scroll', spy);
+  }, []);
+  useEffect(() => { if (focusChat > 0) inputEl.current?.focus({ preventScroll: true }); }, [focusChat]);
   useEffect(() => { const el = logEl.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs]);
   // Grow with the text. An empty box keeps its natural height (measuring it at page load could leave it stuck at the maximum).
   useEffect(() => { const t = inputEl.current; if (!t) return; if (!input) { t.style.height = ''; return; } t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; }, [input]);
@@ -135,11 +164,11 @@ export default function App() {
     return C.aiToEx(json.result, c0);
   }
 
-  async function send(textIn?: string) {
+  async function send(textIn?: string, builtInOnly = false) {
     const text = (textIn !== undefined ? textIn : input).trim();
     if (!text || busy) return;
     setInput('');
-    if (/^\s*(start over|start a new booking|new booking|reset)\b/i.test(text)) { say('user', text); greet(); return; }
+    if (/^\s*(start over|start a new booking|new booking|reset)\b/i.test(text)) { newBooking(); return; }
     say('user', text);
     if (chat.current.b._ref) {
       say('bot', 'This booking is already booked under reference ' + chat.current.b._ref + ' and can’t be changed here. Say “start over” to make a new booking.', ['Start a new booking']);
@@ -159,7 +188,7 @@ export default function App() {
     const c0 = chat.current, snap = C.cloneChat(c0);
     const askQ = c0.reask ? c0.reask.message : c0.asked ? c0.asked.q : null;
     let log: any = null;
-    if (aiOn) {
+    if (aiOn && !builtInOnly) {
       say('bot', 'Reading your message…', null, true);
       try {
         const ex = await readWithAI(c0, text, askQ);
@@ -182,7 +211,7 @@ export default function App() {
       bump();
       return;
     }
-    if (log.reset) { greet(); return; }
+    if (log.reset) { newBooking(); return; }
     const reply = compose(log, snap);
     say('bot', reply.text, reply.chips);
     bump();
@@ -231,12 +260,22 @@ export default function App() {
   const ackChat = (keys: string[]) => { chat.current.b._acks = keys; bump(); };
   const resetChat = () => { resetBooking(chat.current.b); say('bot', 'Everything is back to the details you gave me.', completeChips(PF.evaluate(chat.current.b))); thump(); bump(); };
 
+  /** From Carrier options: a new chat booking that already has the country, pallets, weight and priority. The normal parser and validation read it. */
+  function useInBooking(d: UseDetails) {
+    const started = msgsRef.current.some(m => m.role === 'user');
+    if (started && typeof window !== 'undefined' && window.confirm && !window.confirm('Start a new chat booking with these details? The booking in the chat now will be cleared.')) return;
+    greet(); setInput(''); setMode('chat'); setFocusChat(n => n + 1); scrollToId('start');
+    void send('I’m sending ' + d.pallets + (d.pallets === 1 ? ' pallet' : ' pallets') + ' weighing ' + d.weight + ' kg to ' + d.dest + '. Priority ' + d.priority + '.', true);
+  }
+  const clearExample = () => { setUpload(null); setSelState(null); setFilter('all'); thump(); };
+
   const uploadHandlers: UploadHandlers = {
     fix: (b, spec) => { const r = applyChange(b, spec); thump(); bump(); return r; },
     reset: b => { resetBooking(b); thump(); bump(); },
     ack: (b, keys) => { b._acks = keys; bump(); },
-    book: b => { void bookOne(b, 'upload', upload?.fileName); },
+    book: b => { if (upload?.example) return; void bookOne(b, 'upload', upload?.fileName); },
     bookAllClear: async () => {
+      if (upload?.example) return;
       const todo = (upload?.bookings || []).filter((b: any) => !b._ref && PF.evaluate(b).status === 'clear');
       for (let i = 0; i < todo.length; i++) { setBulk({ done: i, total: todo.length }); await bookOne(todo[i], 'upload', upload?.fileName); }
       setBulk(null);
@@ -255,6 +294,7 @@ export default function App() {
     },
     busy: bookBusy,
     bulk,
+    clearExample,
   };
 
   const showUpload = (u: any) => { setUpload(u); setSelState(null); setFilter('all'); thump(); setMode('upload'); };
@@ -296,36 +336,53 @@ export default function App() {
   }
   const setSel = (id: string | null) => { setSelState(id); thump(); };
 
+  /** Clears everything: chat, booking, results, any uploaded file and any example. Same as typing "start over". */
+  function newBooking() {
+    greet(); setUpload(null); setSelState(null); setFilter('all'); setUploadMsg(''); setSaveNote(''); setInput('');
+    setMode('chat'); setFocusChat(n => n + 1); thump();
+  }
+  const reduced = () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const scrollToId = (id: string) => { const el = document.getElementById(id); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); };
+  function goTo(k: NavKey) {
+    if (k === 'chat' || k === 'upload' || k === 'example') setSection('app');
+    if (k === 'chat') { setMode('chat'); setFocusChat(n => n + 1); scrollToId('start'); }
+    else if (k === 'upload') { setMode('upload'); scrollToId('start'); }
+    else if (k === 'example') { loadExample(); }
+    else if (k === 'rulebook') { if (rulebookEl.current) rulebookEl.current.open = true; setSection('rulebook'); scrollToId('rulebook'); }
+    else if (k === 'carriers') { setSection('carriers'); scrollToId('carriers'); const f = document.getElementById('co-dest'); if (f) f.focus({ preventScroll: true }); }
+    else if (k === 'about') { setSection('about'); scrollToId('about'); }
+  }
+  /** Built-in sample, read by the same parser and rulebook as a real file. Never stored and never sent anywhere. */
+  async function loadExample() {
+    if (upload && !upload.error && !upload.example && typeof window !== 'undefined' && window.confirm && !window.confirm('Replace your uploaded results with the example? Your file itself is not changed.')) return;
+    setMode('upload'); scrollToId('start'); setSaveNote(''); setUploadMsg('');
+    const mod: any = await import('xlsx');
+    const res = parseExample(mod.default ?? mod);
+    if (res.error || !res.bookings.length) { showUpload({ error: res.error || 'The example could not be built.', fileName: 'Example data' }); return; }
+    showUpload({ fileName: 'Example data', example: true, bookings: res.bookings, warnings: res.warnings });
+  }
+  const navCurrent: NavKey = section !== 'app' ? section : mode === 'chat' ? 'chat' : upload && upload.example ? 'example' : 'upload';
+
   const c = chat.current, b = c.b;
   const lastIdx = msgs.length - 1;
 
   return (
     <div className="frame">
       <i className="plus tl" aria-hidden="true" /><i className="plus tr" aria-hidden="true" /><i className="plus bl" aria-hidden="true" /><i className="plus br" aria-hidden="true" />
+      <Nav current={navCurrent} onGo={goTo} onNew={newBooking} />
       <header className="hero">
-        <nav className="nav" aria-label="App">
-          <div className="brandrow">
-            <span className="logo" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></svg>
-            </span>
-            <span className="wordmark">UK to EU shipments</span>
-          </div>
-          <div className="topside">
-            <ThemeToggle />
-            <div className="today">{today}</div>
-          </div>
-        </nav>
         <div className="hero-copy">
           <span className="eyebrow">Booking and pre-flight checks</span>
           <h1 className="brand">Get Your Ship Together</h1>
           <p className="tag">Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against the rulebook before it leaves.</p>
+          <div className="today">{today}</div>
         </div>
         <i className="plus l" aria-hidden="true" /><i className="plus r" aria-hidden="true" />
       </header>
 
       <div className="app">
 
-      <main className="grid">
+      <main className="grid" id="start">
         <section className="card left" aria-label="Start a booking">
           <div className="tabs" role="tablist">
             <button className="tab" role="tab" id="tab-chat" aria-selected={mode === 'chat'} aria-controls="pane-chat" onClick={() => setMode('chat')}>Chat to book</button>
@@ -384,7 +441,9 @@ export default function App() {
         </section>
       </main>
 
-      <details className="card ref">
+      <CarrierOptions onUse={useInBooking} />
+
+      <details className="card ref" id="rulebook" ref={rulebookEl}>
         <summary>Rulebook and rate card used for every check</summary>
         <div className="inner">
           <div className="scroll"><table>
@@ -407,6 +466,8 @@ export default function App() {
         </div>
       </details>
       <p className="foot">Checks run in the browser using fixed rules, so the same booking always gets the same result. Delivery dates are estimates based on calendar days in transit.</p>
+
+      <About />
       </div>
     </div>
   );

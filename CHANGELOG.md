@@ -69,6 +69,18 @@ R-01 to R-10, their severities and the rate card are unchanged. All three rules 
 
 Visual only. Flat grey canvas, white cards with hairline borders and tight low shadows, a near-black pill button with a white outlined secondary, pill tabs, a framed page with corner plus-marks, and Cal Sans headings with Inter body text. Red, amber and green, their tints and the status tiles are unchanged and still locked by `tests/theme.test.tsx`; the booked tile is now blue. Differences from the design brief: dark mode is kept (you asked for light and dark), the brief's muted grey is darkened to pass 4.5:1 contrast, and the header is trimmed on phones so the message box is on screen when the page opens. Proved by: theme tests (contrast pairs, locked status colours, flat-design checks) and a manual phone check at 375x812 in both themes (no sideways scroll, message box visible).
 
+## Header navigation, Try an example, Carrier options, About
+
+R-01 to R-10, their severities, the carrier rate card and all existing validation and recommendation logic are unchanged. Checks stay deterministic code.
+
+**Part 1. Header navigation.** `components/Nav.tsx`, sticky, with Chat to book, Upload a file, Try an example, Rulebook and Carrier options on the left, and New booking, the Light/Dark switch and About (a plain text link, rightmost) on the right. Every scroll target carries `scroll-margin-top` equal to the measured header height (`--nav-h`), the sticky chat panel sits below it, and the safe-area insets are respected. The current view has an active style and `aria-current`; it follows the scroll position. Under 700px the left group, New booking and About give way to a Menu button (five items, New booking, About last; closes after a choice, on Escape, or on a click outside). Switching tabs keeps the booking; New booking (and typing "start over", which now does the same) clears chat, booking, results, uploaded file and any example. Proved by: `tests/nav.test.tsx` (19 tests: order, About last, tab order, each item's action, aria-current, menu open/close/Escape, tabs keep the booking, New booking resets, sticky and scroll-margin rules in the stylesheet) and a browser check at 375, 1100 and 1280px (no horizontal scroll, targets land below the header).
+
+**Part 2. Try an example.** `lib/example.ts` builds a small workbook in memory (EX-001 clean, EX-002 Amber only, EX-003 four Reds, EX-004 a heavy load) and reads it with the same `parseWorkbook` and rule engine as a real upload; the results are never written into the data. Ready dates are today plus 2 to 5 days. A banner says "Example data, not your file" with Clear example. It is never stored or sent, and booking is switched off for it (the buttons say so). Proved by: `tests/example.test.tsx` (the four outcomes through the real engine, dates at two different "todays", banner and Clear example, no request other than the AI-status check).
+
+**Part 3. Carrier options.** The rate card is rendered from `PF.CARRIERS` (no second copy). The compare tool (`lib/compare.ts`) validates with the shared `checkNumber`/`inputErrorText`, then calls the same `PF.recommend` as booking and upload, once per priority for the winner row and once for Balanced for the scores. It shows total price, days, on-time, kg per pallet against the limit, "Fits, X kg spare" or "Over by X kg", the pallets and price that would make a carrier fit, and a one-line reason. "Use these details in a booking" starts a chat booking through the normal parser and validation (built-in parser, so the pre-fill is deterministic). Proved by: `tests/carriers.test.tsx` (the three worked examples, six rejected inputs with no NaN or Infinity, and an equality check of the tool against `evaluate()` for 3 countries x 4 priorities x 7 loads).
+
+**Part 4. About.** `content/about.ts` holds all About text; `components/About.tsx` only renders it. Every dummy string starts with "[Placeholder]". `npm run check:placeholders` lists each remaining one and exits 1 while any exist (comment lines are ignored). Proved by: `tests/about.test.tsx` (renders every item, heading hierarchy, a changed content object and a replaced content module change the output with no code change, the script fails and passes as specified).
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.
@@ -158,3 +170,9 @@ Restyled from the "Claymorphic Comic Ledger" design brief, in both Light and Dar
 - **Dates with no year ("5 Nov") assume the current year**, with the date echoed back. A past date is then flagged by R-10 rather than silently moved to next year.
 - **"Next Friday" means the first Friday after today.** The echoed date lets the seller correct it.
 - **Booking is a recorded reference, not a carrier dispatch.** There is no carrier integration, and the screen says so.
+- **Booking from the example is off.** The brief says the example is never stored or sent anywhere, and a booking is sent to the server, so the example can be fixed and read but not booked.
+- **The Rulebook section keeps its own rate card table.** It reads the same `PF.CARRIERS`, so there is still one source of data; removing it was not asked for.
+- **"Use these details in a booking" asks before it clears a chat that already has your messages**, and keeps any uploaded results.
+- **Smooth scrolling is skipped when the device asks for reduced motion.**
+- **Section headings in `content/about.ts` have no [Placeholder] tag**, because they are the labels you specified; only the dummy text does.
+

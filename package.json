@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "check:placeholders": "node scripts/check-placeholders.mjs",
     "test:tz": "for tz in UTC America/Los_Angeles Pacific/Kiritimati Pacific/Pago_Pago Asia/Kolkata Europe/London; do echo \"TZ=$tz\"; TZ=$tz vitest run tests/regression.test.ts tests/workbook.test.ts 2>&1 | grep -E 'Tests |FAIL|×'; done"
   },
   "dependencies": {
