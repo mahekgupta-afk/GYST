@@ -1,68 +1,94 @@
-// ABOUT PAGE CONTENT: the only file you need to edit to change the About section.
-//
-// How to edit
-//  - Change any text between the quotes. Add or remove items in the lists (steps, checks, limits, team).
-//  - Every dummy string starts with the placeholder tag "[Placeholder]". When you replace a string with real
-//    text, delete that tag from it. Section headings are real labels and have no tag.
-//  - Run "npm run check:placeholders" to list every string that still has the tag. It exits with an error
-//    while any are left, so it can also be used as a release check.
-//  - Initials in the team circles are optional; if you leave them out they are taken from the name.
-//  - Nothing here is code: no layout, links or HTML. The component only reads this file.
+// ABOUT SECTION CONTENT: edit the text here; no layout code needs to change.
+//  - Change any text between the quotes, or add and remove items in the lists.
+//  - Nothing here is code: no layout, links or HTML. The component builds the email and phone links from the
+//    `contact` values (phoneLink is the number without spaces or dashes, used for the tap-to-call link).
+//  - Run "npm run check:placeholders" before a release: it fails while any dummy-text tag is left in this folder.
 
-export type TeamMember = { name: string; role: string; initials?: string };
-
+export type Way = { title: string; text: string };
+export type Member = { name: string; role: string; initials?: string };
 export type AboutContent = {
   heading: string;
   tagline: string;
-  headings: { what: string; why: string; how: string; checks: string; scope: string; team: string; contact: string };
-  what: string;
-  why: string;
-  steps: string[];
-  checks: string[];
-  scope: string[];
-  team: TeamMember[];
-  contact: string;
+  whatWeDo: { title: string; intro: string; ways: Way[] };
+  why: { title: string; text: string };
+  howItWorks: { title: string; steps: string[] };
+  whatWeCheck: { title: string; items: string[] };
+  scope: { title: string; items: string[] };
+  team: { title: string; intro: string; members: Member[] };
+  contact: { title: string; email: string; phone: string; phoneLink: string };
 };
 
 export const about: AboutContent = {
-  heading: 'About',
-  tagline: '[Placeholder] Catch shipping mistakes before the shipment leaves.',
-  headings: {
-    what: 'What it does',
-    why: 'Why we built it',
-    how: 'How it works',
-    checks: 'What it checks',
-    scope: 'Scope and limits',
-    team: 'The team',
-    contact: 'Contact',
+  heading: "About",
+  tagline: "Catch shipping mistakes before the shipment leaves.",
+
+  whatWeDo: {
+    title: "What we do",
+    intro:
+      "Get Your Ship Together helps sellers book UK to EU shipments and find problems in their paperwork before the goods leave. There are two ways to use it:",
+    ways: [
+      {
+        title: "Chat to book",
+        text: "Describe your shipment in your own words. We ask only for what is missing, check everything against our ten rules, recommend the right carrier with the reason, and book it for you.",
+      },
+      {
+        title: "Upload a file",
+        text: "Upload your Bookings and Items sheets. We check every booking, show you what is wrong, how serious it is and how to fix it, then book the shipments that are ready.",
+      },
+    ],
   },
-  what: '[Placeholder] Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against ten rules, and you get a recommended carrier with the reason.',
-  why: '[Placeholder] Small mistakes in shipping paperwork cause customs holds and missing stock. We wanted sellers to find and fix them before the goods leave.',
-  steps: [
-    '[Placeholder] Tell us about your shipment in the chat, or upload your Bookings and Items sheets.',
-    '[Placeholder] Pre-flight checks: every booking is checked against the ten rules. Each problem is marked Red or Amber, with the fix.',
-    '[Placeholder] Carrier recommendation and booking: you get a recommended carrier with the reason, and you can book once no Red problems are left.',
-  ],
-  checks: [
-    '[Placeholder] HS codes: every item has one of at least 6 digits.',
-    '[Placeholder] Declared value: it equals quantity × unit price, within 1%.',
-    '[Placeholder] Carton counts: units per carton × cartons equals the quantity, and the item cartons add up to the booking total.',
-    '[Placeholder] Weight per pallet: it is within the chosen carrier’s limit, and gross weight is at least the weight of the items.',
-    '[Placeholder] Restricted goods: no lithium batteries, aerosols or flammable liquids.',
-    '[Placeholder] Delivery appointment: a shipment to a warehouse has one (a warning).',
-    '[Placeholder] Country of origin: every item has one (a warning).',
-    '[Placeholder] Ready date: it is not in the past (a warning, and a past date has to be changed before booking).',
-  ],
-  scope: [
-    '[Placeholder] UK to Germany, France and the Netherlands only.',
-    '[Placeholder] Prices and values are in GBP only.',
-    '[Placeholder] Delivery dates are estimates, based on calendar days in transit.',
-    '[Placeholder] Bookings are recorded with a reference but are not transmitted to a carrier.',
-  ],
-  team: [
-    { name: '[Placeholder] Team Member One', role: '[Placeholder] Product', initials: 'T1' },
-    { name: '[Placeholder] Team Member Two', role: '[Placeholder] Engineering', initials: 'T2' },
-    { name: '[Placeholder] Team Member Three', role: '[Placeholder] Operations', initials: 'T3' },
-  ],
-  contact: '[Placeholder] hello@example.com',
+
+  why: {
+    title: "Why we built it",
+    text: "Small mistakes in shipping paperwork cause big problems later: goods held at customs, or units reported missing at the receiving warehouse. Sellers often only find out days afterwards, when their stock is already stuck. We built this so mistakes are found and fixed first.",
+  },
+
+  howItWorks: {
+    title: "How it works",
+    steps: [
+      "Tell us about your shipment in chat, or upload your sheets.",
+      "We check it against ten rules and tell you what to fix.",
+      "We recommend a carrier based on what matters most to you, and book it.",
+    ],
+  },
+
+  whatWeCheck: {
+    title: "What we check",
+    items: [
+      "HS codes are present and valid",
+      "Declared value matches the items",
+      "Carton counts add up",
+      "Weight per pallet is within the carrier's limit",
+      "No restricted goods (lithium batteries, aerosols, flammable liquids)",
+      "A delivery appointment is booked for warehouse deliveries",
+      "Every item has a country of origin",
+      "The ready to ship date is not in the past",
+    ],
+  },
+
+  scope: {
+    title: "Scope and limits",
+    items: [
+      "Shipments from the UK to Germany, France and the Netherlands",
+      "Prices in GBP only",
+      "Delivery dates are estimates based on calendar days in transit",
+      "Bookings are recorded under a reference but are not yet transmitted to a carrier",
+    ],
+  },
+
+  team: {
+    title: "The team",
+    intro: "We are two partners.",
+    members: [
+      { name: "Mahek Gupta", role: "Partner", initials: "MG" },
+      { name: "Nirali Desai", role: "Partner", initials: "ND" },
+    ],
+  },
+
+  contact: {
+    title: "Contact",
+    email: "Getyouship2gether@hotmail.in",
+    phone: "+44 987-654-3210",
+    phoneLink: "+449876543210", // used for the tap-to-call link
+  },
 };

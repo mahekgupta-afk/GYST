@@ -11,51 +11,68 @@ import About from '../components/About';
 import { about, type AboutContent } from '../content/about';
 
 afterEach(() => cleanup());
-const strings = (c: AboutContent) => [c.tagline, c.what, c.why, ...c.steps, ...c.checks, ...c.scope, c.contact, ...c.team.flatMap(m => [m.name, m.role])];
+const strings = (c: AboutContent) => [c.tagline, c.whatWeDo.intro, ...c.whatWeDo.ways.flatMap(w => [w.title, w.text]), c.why.text, ...c.howItWorks.steps, ...c.whatWeCheck.items, ...c.scope.items,
+  c.team.intro, ...c.team.members.flatMap(m => [m.name, m.role]), c.contact.email, c.contact.phone];
+const css = readFileSync('app/globals.css', 'utf8');
 
 describe('About renders every item from the content file', () => {
-  it('shows each string, in the specified section order', () => {
+  it('shows each string, and the section titles in the specified order', () => {
     const { container } = render(<About />);
     for (const s of strings(about)) expect(container.textContent, s).toContain(s);
     const heads = [...container.querySelectorAll('h2, h3')].map(h => h.textContent);
-    expect(heads).toEqual(['About', 'What it does', 'Why we built it', 'How it works', 'What it checks', 'Scope and limits', 'The team', 'Contact']);
+    expect(heads).toEqual(['About', 'What we do', 'Why we built it', 'How it works', 'What we check', 'Scope and limits', 'The team', 'Contact']);
   });
-  it('has one h2 and h3 for the subsections', () => {
+  it('has one h2, h3 for the subsections and h4 only for the two ways', () => {
     const { container } = render(<About />);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
     expect(container.querySelectorAll('h3')).toHaveLength(7);
-    expect(container.querySelectorAll('h1, h4')).toHaveLength(0);
+    expect([...container.querySelectorAll('h4')].map(h => h.textContent)).toEqual(['Chat to book', 'Upload a file']);
+    expect(container.querySelectorAll('h1')).toHaveLength(0);
   });
-  it('How it works is three numbered steps; the team is three cards with initials and no photos; contact is plain text', () => {
+  it('What we do is two cards, side by side on desktop and stacked on a phone', () => {
+    const { container } = render(<About />);
+    expect(container.querySelectorAll('.about-way')).toHaveLength(2);
+    expect(css).toMatch(/\.about \.about-ways \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+    expect(css).toMatch(/@media \(max-width: 700px\) \{ \.about \.about-ways \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);
+  });
+  it('How it works is three numbered steps; the check and scope lists have 8 and 4 items', () => {
     const { container } = render(<About />);
     expect(container.querySelectorAll('ol.about-steps > li')).toHaveLength(3);
-    expect(container.querySelectorAll('.about-person')).toHaveLength(3);
-    expect([...container.querySelectorAll('.about-avatar')].map(e => e.textContent)).toEqual(['T1', 'T2', 'T3']);
-    expect(container.querySelectorAll('img, form, input, a[href^="mailto"]')).toHaveLength(0);
+    expect(about.whatWeCheck.items).toHaveLength(8);
+    expect(about.scope.items).toHaveLength(4);
   });
-  it('lists the eight checks and the four limits', () => {
+  it('shows exactly two team cards, with initials and no photos', () => {
     const { container } = render(<About />);
-    const t = container.textContent!;
-    for (const w of ['HS codes', 'Declared value', 'Carton counts', 'Weight per pallet', 'Restricted goods', 'Delivery appointment', 'Country of origin', 'Ready date']) expect(t).toContain(w);
-    for (const w of ['Germany, France and the Netherlands only', 'GBP only', 'estimates', 'not transmitted to a carrier']) expect(t).toContain(w);
+    const cards = [...container.querySelectorAll('.about-person')];
+    expect(cards).toHaveLength(2);
+    expect(cards.map(c => c.textContent)).toEqual(['MGMahek GuptaPartner', 'NDNirali DesaiPartner']);
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(container.textContent).not.toContain('Team Member');
   });
-  it('uses the dummy wording given', () => {
-    expect(about.tagline).toBe('[Placeholder] Catch shipping mistakes before the shipment leaves.');
-    expect(about.team.map(m => m.name + ', ' + m.role.replace('[Placeholder] ', ''))).toEqual(['[Placeholder] Team Member One, Product', '[Placeholder] Team Member Two, Engineering', '[Placeholder] Team Member Three, Operations']);
-    expect(about.contact).toBe('[Placeholder] hello@example.com');
+  it('contact has a mailto link and a tap-to-call link, and no form', () => {
+    const { container } = render(<About />);
+    const mail = screen.getByRole('link', { name: 'Getyouship2gether@hotmail.in' });
+    expect(mail.getAttribute('href')).toBe('mailto:Getyouship2gether@hotmail.in');
+    const tel = screen.getByRole('link', { name: '+44 987-654-3210' });
+    expect(tel.getAttribute('href')).toBe('tel:+449876543210');
+    expect(container.querySelectorAll('form, input, textarea')).toHaveLength(0);
   });
-  it('every dummy string starts with [Placeholder]', () => {
-    for (const s of strings(about)) expect(s.startsWith('[Placeholder] '), s).toBe(true);
+  it('no placeholder text is left', () => {
+    const { container } = render(<About />);
+    expect(container.textContent).not.toMatch(/\[placeholder\]/i);
+    expect(JSON.stringify(about)).not.toMatch(/\[placeholder\]/i);
   });
   it('editing the content changes the output with no code change', () => {
-    const edited: AboutContent = { ...about, tagline: 'Real tagline.', steps: ['One real step.'], team: [{ name: 'Asha Rao', role: 'Founder' }], contact: 'ask@shipco.example' };
+    const edited: AboutContent = { ...about, tagline: 'Real tagline.', howItWorks: { ...about.howItWorks, steps: ['One real step.'] },
+      team: { ...about.team, members: [{ name: 'Asha Rao', role: 'Founder' }] }, contact: { ...about.contact, email: 'ask@shipco.example', phoneLink: '+441234' } };
     const { container } = render(<About content={edited} />);
     const t = container.textContent!;
     expect(t).toContain('Real tagline.');
-    expect(t).toContain('ask@shipco.example');
     expect(t).not.toContain('Catch shipping mistakes');
     expect(container.querySelectorAll('ol.about-steps > li')).toHaveLength(1);
     expect(container.querySelector('.about-avatar')!.textContent).toBe('AR');       // initials taken from the name
+    expect(screen.getByRole('link', { name: 'ask@shipco.example' }).getAttribute('href')).toBe('mailto:ask@shipco.example');
+    expect(screen.getByRole('link', { name: '+44 987-654-3210' }).getAttribute('href')).toBe('tel:+441234');
   });
   it('the page picks up an edited content file (module replaced, component untouched)', async () => {
     vi.resetModules();
@@ -89,12 +106,10 @@ describe('npm run check:placeholders', () => {
   it('is wired up in package.json', () => {
     expect(JSON.parse(readFileSync('package.json', 'utf8')).scripts['check:placeholders']).toBe('node scripts/check-placeholders.mjs');
   });
-  it('fails and lists every remaining placeholder in the real content file', () => {
+  it('passes on the real content file now that the dummy text is gone', () => {
     const r = run();
-    expect(r.status).toBe(1);
-    const listed = r.stdout.trim().split('\n').filter(l => l.startsWith('content/about.ts:'));
-    expect(listed).toHaveLength(strings(about).length);
-    expect(r.stderr).toContain(strings(about).length + ' [Placeholder] strings left');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('No [Placeholder] strings left');
   });
   it('passes when no placeholders remain', () => {
     const r = run(tmp('about.ts', "export const a = { tagline: 'Real words.' };\n"));

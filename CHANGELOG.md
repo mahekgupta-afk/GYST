@@ -81,6 +81,10 @@ R-01 to R-10, their severities, the carrier rate card and all existing validatio
 
 **Part 4. About.** `content/about.ts` holds all About text; `components/About.tsx` only renders it. Every dummy string starts with "[Placeholder]". `npm run check:placeholders` lists each remaining one and exits 1 while any exist (comment lines are ignored). Proved by: `tests/about.test.tsx` (renders every item, heading hierarchy, a changed content object and a replaced content module change the output with no code change, the script fails and passes as specified).
 
+## Real About content
+
+`content/about.ts` now holds the real About text (what we do as two cards, why we built it, how it works, what we check, scope and limits, two partners, contact). The content file has a new shape, so `components/About.tsx` was adapted to render every field; no rules, validation or recommendation logic changed. What we do is two cards side by side on desktop and stacked under 700px. The team is exactly two cards (MG, ND). Contact is a `mailto:` link and a `tel:+449876543210` link showing "+44 987-654-3210", with no form. All "[Placeholder]" strings are gone and `npm run check:placeholders` passes. The About link still lands with the heading below the sticky header. Proved by: `tests/about.test.tsx` and a browser check at 1100px and phone width.
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.
