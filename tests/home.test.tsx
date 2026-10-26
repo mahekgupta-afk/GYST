@@ -29,13 +29,32 @@ describe('the home page sections', () => {
     expect(css).toMatch(/\.landing-h1 \{[^}]*clamp\(44px, 8vw, 104px\)/);
     expect(css).toMatch(/\.landing \{[^}]*min-height: calc\(100dvh/);                  // full-height hero
   });
-  it('the hero card starts the chosen way of booking', () => {
+  it('each hero pill opens its way of booking straight away, and Start opens the highlighted one', async () => {
     render(<App />);
     const card = screen.getByRole('group', { name: home.heroCard.title });
     fireEvent.click(within(card).getByRole('button', { name: 'Upload a file' }));
     expect(within(card).getByRole('button', { name: 'Upload a file' }).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(within(card).getByRole('button', { name: /Start/ }));
     expect(screen.getByRole('tab', { name: 'Upload a file' }).getAttribute('aria-selected')).toBe('true');
+    expect((Element.prototype.scrollIntoView as any).mock.contexts.at(-1).id).toBe('start');
+    fireEvent.click(within(card).getByRole('button', { name: 'Chat to book' }));
+    expect(screen.getByRole('tab', { name: 'Chat to book' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(within(card).getByRole('button', { name: 'Upload a file' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat to book' }));          // switch away by hand
+    fireEvent.click(within(card).getByRole('button', { name: /Start/ }));        // Start uses the highlighted pill
+    expect(screen.getByRole('tab', { name: 'Upload a file' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(within(card).getByRole('button', { name: 'Try an example' }));
+    await waitFor(() => expect(document.body.textContent).toContain('Example data, not your file'));
+  });
+  it('if a long smooth scroll has not arrived, it jumps to the section', () => {
+    vi.useFakeTimers();
+    render(<App />);
+    const spy = Element.prototype.scrollIntoView as any;
+    fireEvent.click(within(screen.getByRole('group', { name: home.heroCard.title })).getByRole('button', { name: 'Chat to book' }));
+    const before = spy.mock.calls.length;
+    expect(spy.mock.calls[before - 1][0].behavior).toBe('smooth');
+    act(() => { vi.advanceTimersByTime(1200); });                                 // the stubbed browser never moved
+    expect(spy.mock.calls.length).toBe(before + 1);
+    expect(spy.mock.calls[before][0].behavior).toBe('auto');
   });
   it('the stats are counted from the app itself, not typed in', () => {
     render(<App />);

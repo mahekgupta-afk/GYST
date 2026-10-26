@@ -138,6 +138,10 @@ Skipped because the app has no equivalent and nothing should be invented: the ne
 
 Proved by: `tests/home.test.tsx` (headline, hero card, stats counted from the engine, cards from the content files, section order, footer links, headings, full-screen menu rules, Reveal and CountUp with and without IntersectionObserver and with reduced motion), `tests/theme.test.tsx` (contrast of the new palette, locked status colours, shapes) and a browser check at 1360px and 375px (no sideways scroll, full-screen menu). Found while building: Next.js refuses to build a page that reads the clock during prerender, so the footer year is read in the browser.
 
+## Hero card buttons act straight away
+
+The three pills in the "Start your shipment" card (Chat to book, Upload a file, Try an example) used to only highlight, and Start did the work, so clicking a pill looked like nothing happened. Each pill now opens its way of booking immediately and also stays highlighted; Start opens the highlighted one. Smooth scrolling to a section now checks, a moment later, that it arrived, and jumps there if a long smooth scroll was interrupted. Proved by: `tests/home.test.tsx` (each pill, Start, and the jump fallback) and a browser run of every button.
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.

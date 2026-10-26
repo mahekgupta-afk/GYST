@@ -410,7 +410,18 @@ export default function App() {
     setMode('chat'); setFocusChat(n => n + 1); thump();
   }
   const reduced = () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const scrollToId = (id: string) => { const el = document.getElementById(id); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); };
+  // Smooth scroll to a section. If a long smooth scroll has not arrived after a moment (a busy page can interrupt it), jump there.
+  const scrollToId = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el || !el.scrollIntoView) return;
+    el.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' });
+    if (reduced()) return;
+    window.setTimeout(() => {
+      const t = document.getElementById(id);
+      const navH = parseFloat(document.documentElement.style.getPropertyValue('--nav-h')) || 70;
+      if (t && Math.abs(t.getBoundingClientRect().top - (navH + 12)) > 40) t.scrollIntoView({ behavior: 'auto', block: 'start' });
+    }, 1100);
+  };
   function goTo(k: NavKey) {
     if (k === 'chat' || k === 'upload' || k === 'example') setSection('app');
     if (k === 'chat') { setMode('chat'); setFocusChat(n => n + 1); scrollToId('start'); }

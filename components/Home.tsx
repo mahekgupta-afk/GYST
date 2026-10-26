@@ -44,7 +44,7 @@ export function Hero({ onGo, content = defaultHome }: { onGo: Go; content?: Home
           <div className="herocard" role="group" aria-label={content.heroCard.title}>
             <div className="herocard-title">{content.heroCard.title}</div>
             <div className="herocard-pills">
-              {pills.map(([k, label]) => <button key={k} type="button" className="hpill" aria-pressed={mode === k} onClick={() => setMode(k)}>{label}</button>)}
+              {pills.map(([k, label]) => <button key={k} type="button" className="hpill" aria-pressed={mode === k} onClick={() => { setMode(k); onGo(k); }}>{label}</button>)}
             </div>
             <button type="button" className="btn herocard-go" onClick={() => onGo(mode)}>{content.heroCard.primary} →</button>
           </div>
