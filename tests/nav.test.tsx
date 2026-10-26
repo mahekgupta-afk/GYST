@@ -38,15 +38,16 @@ describe('header navigation', () => {
   it('left group is in the specified order, the right cluster is New booking, switch, About, with no Template item', () => {
     render(<App />);
     const labels = tabbable().map(label).filter(t => t !== 'Menu');
-    expect(labels).toEqual(['Chat to book', 'Upload a file', 'Try an example', 'Rulebook', 'Carrier options', 'New booking', 'Light', 'Dark', 'About']);
+    expect(labels).toEqual(['Chat to book', 'Upload a file', 'Try an example', 'Rulebook', 'Carrier options', 'New booking', 'About', 'Light', 'Dark']);
     expect(labels.some(l => /template/i.test(l))).toBe(false);
   });
 
-  it('About is the rightmost element, styled as a plain text link rather than a button', () => {
+  it('About sits immediately left of the Light/Dark switch, styled as a plain text link rather than a button', () => {
     render(<App />);
-    const all = tabbable();
-    const about = all[all.length - 1];
+    const all = tabbable().filter(e => label(e) !== 'Menu');
+    const about = all[all.length - 3];
     expect(label(about)).toBe('About');
+    expect(label(all[all.length - 2])).toBe('Light');
     expect(about.tagName).toBe('A');
     expect(about.className).not.toMatch(/\bbtn\b/);
     expect(css).toMatch(/\.navabout \{[^}]*text-decoration: underline/);
@@ -58,8 +59,8 @@ describe('header navigation', () => {
     const pos = (t: string) => order.findIndex(e => label(e) === t);
     expect(pos('Chat to book')).toBeLessThan(pos('Upload a file'));
     expect(pos('Carrier options')).toBeLessThan(pos('New booking'));
-    expect(pos('New booking')).toBeLessThan(pos('Light'));
-    expect(pos('Dark')).toBeLessThan(pos('About'));
+    expect(pos('New booking')).toBeLessThan(pos('About'));
+    expect(pos('About')).toBeLessThan(pos('Light'));
   });
 
   it('Chat to book: switches to the Chat tab, focuses the message box, scrolls to the app', async () => {

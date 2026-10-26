@@ -13,7 +13,7 @@ export const NAV_ITEMS: { key: Exclude<NavKey, 'about'>; label: string }[] = [
 ];
 
 /**
- * Sticky header. Left: the five main views. Right: New booking, the Light/Dark switch, About (last).
+ * Sticky header. Left: the five main views. Right: New booking, About, the Light/Dark switch (rightmost).
  * Under 700px the left group and the right-hand links are hidden by CSS and the Menu button takes over;
  * the Menu list is only in the page while it is open, so each item exists once at any time.
  */
@@ -53,8 +53,8 @@ export default function Nav({ current, onGo, onNew }: { current: NavKey; onGo: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>Menu
           </button>
           <button type="button" className="btn small ghost navnew" onClick={onNew}>New booking</button>
-          <ThemeToggle />
           <a className="navabout" href="#about" aria-current={cur('about')} onClick={e => { e.preventDefault(); onGo('about'); }}>About</a>
+          <ThemeToggle />
           {open ? (
             <ul id="nav-menu" className="navmenu" aria-label="Menu">
               {NAV_ITEMS.map(i => (
