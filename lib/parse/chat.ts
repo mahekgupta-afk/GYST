@@ -813,7 +813,8 @@ function stepAI(c, text, ex, opts) {
   applyScope(ex, sc);
   log.scope = sc.messages;
   log.dateProblem = dateProblemOf(text, today, ask, ex);
-  (ex.items || []).forEach((it, idx) => {
+  // A document the seller uploaded (an invoice) is allowed to carry SKUs; typed text only keeps a SKU the seller actually typed.
+  if (!opts.document) (ex.items || []).forEach((it, idx) => {
     const known = c.b.items[idx];
     if (it.sku && !(known && known.sku === it.sku) && text.toLowerCase().indexOf(String(it.sku).toLowerCase()) < 0) it.sku = null;
   });

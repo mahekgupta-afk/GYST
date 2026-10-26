@@ -6,6 +6,7 @@ import { applyChange, resetBooking, correctedRows, unacknowledged, issueKey, typ
 import { bookShipment } from '@/lib/bookingClient';
 import { fetchJson } from '@/lib/net';
 import { parseExample } from '@/lib/example';
+import { readInvoice, INVOICE_MESSAGES } from '@/lib/invoiceClient';
 import Nav, { type NavKey } from './Nav';
 import About from './About';
 import CarrierOptions, { type UseDetails } from './CarrierOptions';
@@ -43,6 +44,7 @@ export default function App() {
   const logEl = useRef<HTMLDivElement>(null);
   const inputEl = useRef<HTMLTextAreaElement>(null);
   const fileEl = useRef<HTMLInputElement>(null);
+  const invoiceEl = useRef<HTMLInputElement>(null);
 
   const setM = (m: Msg[]) => { msgsRef.current = m; setMsgs(m); };
   const say = (role: Msg['role'], text: string, chips?: string[] | null, typing?: boolean) => setM([...msgsRef.current, { role, text, chips: chips || null, typing: !!typing }]);
@@ -224,6 +226,42 @@ export default function App() {
     if (pendingBook.current) { pendingBook.current = false; void bookChat(); }
   }
 
+  /**
+   * The seller attaches an invoice in the chat. The reader copies what is printed on it; the details go through the same
+   * sanitising, validators and rulebook as anything typed, and the chat then asks only for what is still missing.
+   * The picture is read in memory and not stored.
+   */
+  async function handleInvoice(file: File) {
+    if (busy) return;
+    say('user', 'Invoice attached: ' + file.name);
+    if (chat.current.b._ref) {
+      say('bot', 'This booking is already booked under reference ' + chat.current.b._ref + ' and can’t be changed here. Say “start over” to make a new booking.', ['Start a new booking']);
+      return;
+    }
+    setBusy(true);
+    say('bot', 'Reading your invoice…', null, true);
+    const out = await readInvoice(file);
+    popMsg();
+    if (!out.ok) { setBusy(false); say('bot', out.message, chat.current.asked ? chat.current.asked.chips : null); bump(); return; }
+    const r = out.result;
+    if (!r.isInvoice) { setBusy(false); say('bot', INVOICE_MESSAGES.notInvoice, chat.current.asked ? chat.current.asked.chips : null); bump(); return; }
+    if (r.currency && r.currency !== 'GBP') {
+      setBusy(false);
+      say('bot', 'This invoice is in ' + r.currency + '. I can only book in £ (GBP), so I haven’t used it. Please upload a GBP invoice, or type the prices in £.', chat.current.asked ? chat.current.asked.chips : null); bump(); return;
+    }
+    const snap = C.cloneChat(chat.current);
+    const ex = C.aiToEx(r, chat.current);
+    const log = C.stepAI(chat.current, 'Invoice uploaded: ' + file.name, ex, { document: true });
+    setBusy(false);
+    const notes: string[] = [];
+    if ((r.destCity || r.destCountry) && !ex.b.destCity && !ex.b.destCountry) notes.push('The invoice delivers to ' + [r.destCity, r.destCountry].filter(Boolean).join(', ') + ', which I can’t book. I only deliver to Germany, France and the Netherlands.');
+    if (!r.currency) notes.push('I couldn’t see a currency on the invoice, so I’ve treated the prices as £.');
+    if (!log.set.length && !log.changed.length) { say('bot', [INVOICE_MESSAGES.empty, ...notes].join('\n'), chat.current.asked ? chat.current.asked.chips : null); bump(); return; }
+    const reply = compose(log, snap);
+    say('bot', ['Here is what I read from your invoice. Please check it is right: the checks use it exactly as written, and you can tell me to change anything.', ...notes, reply.text].join('\n'), reply.chips);
+    bump();
+  }
+
   /** Records a booking through the server, which re-checks the rulebook and refuses red bookings. */
   /**
    * Records a booking through the server, which re-checks the rulebook and refuses red bookings.
@@ -403,12 +441,22 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <div className="composer">
+            <div className={'composer' + (aiOn ? ' has-attach' : '')}>
+              {aiOn ? (
+                <>
+                  <button type="button" className="attach" aria-label="Attach an invoice" title="Attach an invoice (picture or PDF)" disabled={busy} onClick={() => invoiceEl.current?.click()}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21.4 11.1l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8" /></svg>
+                  </button>
+                  <input ref={invoiceEl} type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="sr" tabIndex={-1} aria-label="Invoice file"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) void handleInvoice(f); e.target.value = ''; }} />
+                </>
+              ) : null}
               <textarea ref={inputEl} rows={1} value={input} placeholder="Describe your shipment…" aria-label="Your message"
                 onChange={e => setInput(e.target.value)}
+                onPaste={e => { const f = aiOn ? Array.from(e.clipboardData.files || []).find(x => x.type.startsWith('image/')) : null; if (f) { e.preventDefault(); void handleInvoice(f); } }}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
               <button className="btn" disabled={busy} onClick={() => send()}>Send</button>
-              <div className="aibar"><span>Say “start over” at any time to begin a new booking.</span></div>
+              <div className="aibar"><span>Say “start over” at any time to begin a new booking.</span>{aiOn ? <span>Invoices are read once to fill in the details and are not stored.</span> : null}</div>
             </div>
           </div>
           <div className={'pane' + (mode === 'upload' ? ' on' : '')} id="pane-upload" role="tabpanel" aria-labelledby="tab-upload">

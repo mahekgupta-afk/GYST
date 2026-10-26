@@ -180,6 +180,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
 .chip { border: 1px solid var(--edge); background: var(--paper); color: var(--ink); border-radius: 100px; padding: 6px 14px; font-weight: 500; font-size: 14px; min-height: 36px; transition: background-color .15s ease-out, border-color .15s ease-out; }
 .chip:hover { background: var(--paper2); border-color: var(--ink); }
 .composer { border-top: 1px solid var(--line); padding: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px; background: var(--paper); }
+.composer.has-attach { grid-template-columns: auto 1fr auto; }
+.attach { align-self: end; width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--edge); background: var(--paper); color: var(--ink2); display: grid; place-items: center; cursor: pointer; transition: background-color .15s ease-out, color .15s ease-out; }
+.attach:hover:not(:disabled) { background: var(--paper2); color: var(--ink); }
+.attach:disabled { opacity: .5; cursor: not-allowed; }
+.attach svg { width: 20px; height: 20px; }
 .composer textarea { resize: none; border: 1px solid var(--edge); border-radius: 8px; padding: 10px 12px; background: var(--paper); min-height: 46px; max-height: 120px; box-shadow: inset 0 1px 1.9px 0 rgba(0, 0, 0, 0.16); }
 .composer textarea:focus-visible { outline: 3px solid var(--ring); outline-offset: 0; }
 .aibar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13px; color: var(--ink3); }
