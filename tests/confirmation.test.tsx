@@ -127,7 +127,7 @@ describe('reopening from the link', () => {
     const f = reply(200, { confirmation: make() }); vi.stubGlobal('fetch', f);
     render(<BookingView reference="GYST-20261026-ABC123" k="KEYKEYKEYKEYKEYKEYKEYKEY" />);
     expect(await screen.findByText('Booked. Reference GYST-20261026-ABC123')).toBeTruthy();
-    expect(String(f.mock.calls[0][0])).toBe('/api/bookings/GYST-20261026-ABC123?k=KEYKEYKEYKEYKEYKEYKEYKEY');
+    expect(String((f.mock.calls as any)[0][0])).toBe('/api/bookings/GYST-20261026-ABC123?k=KEYKEYKEYKEYKEYKEYKEYKEY');
     expect(screen.getByText(SIMULATED_NOTICE)).toBeTruthy();
   });
   it('a wrong or missing link gets a friendly message and shows nothing about the booking', async () => {
