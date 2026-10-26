@@ -141,8 +141,8 @@ export function correctedRows(bookings: any[]) {
     bookingRows.push([b.id, b.seller, b.originCity, b.originCountry, b.destCity, b.destCountry, b.destType, fmtDate(b.readyDate), b.priority, b.pallets, b.cartons, b.declaredValue, b.currency || 'GBP', b.grossWeight, b.appointment, b._carrier || '']);
     (b.items || []).forEach((i: any) => itemRows.push([b.id, i.sku, i.desc, i.hs == null ? null : String(i.hs), i.qty, i.price, i.upc, i.cartons, i.unitWeight, i.coo]));
     (b._changes || []).forEach((c: Change) => changeRows.push([b.id, c.rule, c.scope, c.field, String(c.from), String(c.to), c.at]));
-    const sel = ev.rec.selected;
-    resultRows.push([b.id, b.seller, b._ref ? 'Booked' : ev.status === 'blocked' ? 'Needs fixing' : ev.status === 'warning' ? 'Ready (warnings)' : 'Ready', ev.counts.red, ev.counts.amber, sel ? sel.carrier : '', sel && ev.rec.pallets ? sel.price * ev.rec.pallets : '', b._ref || '']);
+    const sel = ev.rec.blocked ? null : ev.rec.selected;
+    resultRows.push([b.id || '(no ID)', b.seller, b._ref ? 'Booked' : ev.status === 'blocked' ? 'Needs fixing' : ev.status === 'warning' ? 'Ready (warnings)' : 'Ready', ev.counts.red, ev.counts.amber, sel ? sel.carrier : '', sel && ev.rec.pallets ? sel.price * ev.rec.pallets : '', b._ref || '']);
   });
   return { bookingRows, itemRows, changeRows, resultRows };
 }

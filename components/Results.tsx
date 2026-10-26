@@ -33,7 +33,7 @@ function Verdict({ b, ev, thumpKey }: { b: any; ev: any; thumpKey: number }) {
       <span key={thumpKey} className={'stamp ' + map[1] + ' thump'} aria-hidden="true">{map[0]}</span>
       <div>
         <h2>{title}</h2>
-        <p className="sub">{b.id + ' for ' + (b.seller || 'unnamed seller') + ', ' + (b.originCity || '?') + ' to ' + (b.destCity || b.destCountry || '?') + (ev.counts.red || ev.counts.amber ? '. ' + ev.counts.red + ' red, ' + ev.counts.amber + ' amber.' : '.')}</p>
+        <p className="sub">{idLabel(b) + ' for ' + (b.seller || 'unnamed seller') + ', ' + (b.originCity || '?') + ' to ' + (b.destCity || b.destCountry || '?') + (ev.counts.red || ev.counts.amber ? '. ' + ev.counts.red + ' red, ' + ev.counts.amber + ' amber.' : '.')}</p>
       </div>
       <RuleStrip ev={ev} />
     </div>
@@ -69,6 +69,7 @@ const Stat = ({ v, l }: { v: string; l: string }) => <div className="stat"><b>{v
 function CarrierSection({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
   const rec = ev.rec;
   if (rec.error) return <div className="card section reco"><h3>Recommended carrier</h3><p>No rate card for this destination. Use Germany, France or the Netherlands.</p></div>;
+  if (rec.blocked) return <div className="card section reco"><h3>Recommended carrier</h3><p>Fix the input errors above to get a carrier recommendation.</p></div>;
   const r = rec.recommended;
   const alt = !r ? rec.options.slice().sort((x: any, y: any) => x.minCost - y.minCost)[0] : null;
   return (
@@ -115,6 +116,7 @@ function CarrierSection({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
   );
 }
 
+export const idLabel = (b: any) => (b && b.id ? b.id : '(no ID)');
 const iso = (d: string | null) => (d ? PF.dmy(d) : '—');
 function BookedSummary({ b, ev }: { b: any; ev: any }) {
   const sel = ev.rec.selected, eta = b.readyDate ? PF.addDays(b.readyDate, sel.transit) : null;
@@ -307,8 +309,8 @@ export function exportCSV(bookings: any[]) {
   const out = [['Booking ID', 'Seller', 'Status', 'Rule', 'Severity', 'Item', 'Problem', 'What is wrong', 'How to fix', 'Recommended carrier', 'Total cost GBP'].map(q).join(',')];
   bookings.forEach(b => {
     const ev = PF.evaluate(b), c = ev.rec.recommended, cost = c && ev.rec.pallets ? c.price * ev.rec.pallets : '';
-    const base = [b.id, b.seller, ev.status];
-    const tail = [c ? c.carrier + ' ' + c.service : 'None fits', cost];
+    const base = [idLabel(b), b.seller, ev.status];
+    const tail = [c ? c.carrier + ' ' + c.service : (ev.rec.blocked || ev.rec.error ? '—' : 'None fits'), cost];
     if (!ev.issues.length) out.push(base.concat(['', '', '', 'No issues', '', ''], tail).map(q).join(','));
     ev.issues.forEach((i: any) => out.push(base.concat([i.rule, i.sev, i.item || '', i.title, i.what, i.fix], tail).map(q).join(',')));
   });
@@ -401,11 +403,11 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
               const r = ev.rec, c = r.recommended;
               const go = () => { setSel(uid(b)); window.scrollTo({ top: 0 }); };
               return (
-                <tr key={uid(b)} className="click" tabIndex={0} role="link" aria-label={'Open ' + b.id} onClick={go} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }}>
-                  <td><b>{b.id}</b>{b._ref ? <div className="note">{b._ref}</div> : null}</td><td>{b.seller || '—'}</td><td>{(b.originCity || '?') + ' to ' + (b.destCity || '?')}</td>
+                <tr key={uid(b)} className="click" tabIndex={0} role="link" aria-label={'Open ' + idLabel(b)} onClick={go} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }}>
+                  <td><b>{idLabel(b)}</b>{b._ref ? <div className="note">{b._ref}</div> : null}</td><td>{b.seller || '—'}</td><td>{(b.originCity || '?') + ' to ' + (b.destCity || '?')}</td>
                   <td className="num">{b.pallets != null ? b.pallets : '—'}</td>
                   <td className="num">{ev.counts.red + ev.counts.amber}</td>
-                  <td>{c ? c.carrier + ', ' + (r.pallets ? PF.gbp(c.price * r.pallets) : '—') : (r.error ? '—' : 'None fits')}</td>
+                  <td>{c ? c.carrier + ', ' + (r.pallets ? PF.gbp(c.price * r.pallets) : '—') : (r.error || r.blocked ? '—' : 'None fits')}</td>
                   <td><StatusPills b={b} ev={ev} /></td>
                 </tr>
               );

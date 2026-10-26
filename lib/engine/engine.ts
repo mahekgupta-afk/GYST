@@ -124,10 +124,12 @@ function recommend(b) {
   // The recommendation only considers carriers that can take the load, then ranks them by priority.
   const feasible = options.filter(o => o.eligible);
   const recommended = feasible.length ? rankBy(feasible, priority)[0] : null;
-  const rec = { options, pallets, gw, wpp, priority, preferred, recommended, assumedPriority: PRIORITIES.indexOf(b.priority) < 0 };
+  // With no usable pallet count or gross weight there is nothing to price or check against a weight limit, so nothing is recommended.
+  const blocked = !pallets || gw === null;
+  const rec = { options, pallets, gw, wpp, priority, preferred, recommended: blocked ? null : recommended, blocked, assumedPriority: PRIORITIES.indexOf(b.priority) < 0 };
   // R-05 is checked against the carrier in use: one the user picked, otherwise the recommendation.
   const picked = b._carrier ? options.find(o => o.carrier === b._carrier) : null;
-  rec.selected = picked || recommended || preferred;
+  rec.selected = picked || rec.recommended || preferred;
   rec.userPicked = !!picked;
   rec.reason = explain(rec, b);
   rec.ruledOutNotes = ruledOutNotes(rec);
@@ -142,6 +144,7 @@ function diffText(o, r) {
   return bits.length ? bits.join(', ') : 'the same on price, speed and reliability';
 }
 function explain(rec, b) {
+  if (rec.blocked) return 'Fix the input errors above to get a carrier recommendation.';
   const all = rec.options, p = rec.priority, n = rec.pallets, dest = b.destCountry;
   if (!rec.recommended) {
     const maxLimit = Math.max.apply(null, all.map(o => o.maxKg));
@@ -246,7 +249,8 @@ function evaluate(bIn, opts) {
   // Missing or unreadable inputs
   const data = (title, what, fix, src) => add('DATA', 'red', title, what, fix, null, src);
   if (b._dupCount > 1) data('Duplicate Booking ID', 'The Booking ID “' + b.id + '” appears ' + b._dupCount + ' times in the Bookings sheet (rows ' + (b._dupRows || []).join(', ') + '). Items can only be linked to one of them' + (b._dupLater ? ', and they were linked to the first row, so this row has none.' : '.'), 'Give every booking its own Booking ID, then upload the file again.');
-  if (!items.length && !b._dupLater) data('No items found', 'This booking has no product lines in the Items sheet, so nothing can be checked against the invoice.', 'Add at least one product line with quantity, price and carton details.');
+  if (b._noId) add('INPUT', 'red', 'Input error: Booking ID', 'Bookings sheet, row ' + b._row + ' has no Booking ID. Add one and upload again.', 'Add a Booking ID to this row in the Bookings sheet, and the same ID to its rows in the Items sheet, then upload the file again. This row cannot be booked until then.');
+  if (!items.length && !b._dupLater && !b._noId) data('No items found', 'This booking has no product lines in the Items sheet, so nothing can be checked against the invoice.', 'Add at least one product line with quantity, price and carton details.');
   if (rec.error) data('Route not supported', 'We can only book from the UK to Germany, France or the Netherlands. Destination country is “' + (b.destCountry || 'blank') + '”.', 'Use Germany, France or the Netherlands as the destination country.');
   if ((b.pallets === null || b.pallets === undefined) && !b._bad.pallets) data('Pallet count missing', 'Number of pallets is blank, so weight per pallet and price can’t be worked out.', 'Enter how many pallets the shipment is on.');
   if (typeof b.grossWeight !== 'number' && !b._bad.grossWeight) data('Gross weight missing', 'Total gross weight is blank or not a number.', 'Enter the total weight of everything shipped, including cartons and pallets.');
@@ -444,6 +448,8 @@ const ITEM_COLS = [['Booking ID', ['booking id']], ['Description', ['description
 const missingCols = (heads, spec) => spec.filter(([, alts]) => !alts.some(a => heads.indexOf(a) >= 0)).map(([n]) => n);
 const pick = (r, ...keys) => { for (const k of keys) if (k in r) return r[k]; return null; };
 
+// A Booking ID is trimmed and shown upper-case ("  bk-002 " is BK-002). Matching between sheets uses the same form, so it is case-insensitive.
+const normId = v => { const t = clean(v); return t === null ? '' : t.replace(/\s+/g, ' ').toUpperCase(); };
 function bookingsFromTables(bookingRows, itemRows, opts) {
   opts = opts || {};
   const warnings = [];
@@ -456,14 +462,13 @@ function bookingsFromTables(bookingRows, itemRows, opts) {
   }
   const bookings = [];
   bt.forEach(r => {
-    const id = clean(r['booking id']);
-    if (!id) return;
+    const id = normId(r['booking id']);   // a row with data but no ID is kept, flagged Red, and never silently dropped
     const prRaw = clean(pickKey(r, 'seller priority'));
     const pr = PRIORITIES.find(p => prRaw && p.toLowerCase() === prRaw.toLowerCase());
     const dtRaw = clean(pickKey(r, 'destination type'));
     const apRaw = clean(pickKey(r, 'delivery appointment booked', 'delivery appointment'));
     const b = {
-      id, _row: r._row, seller: clean(r['seller name']), originCity: clean(r['origin city']), originCountry: clean(r['origin country']),
+      id, _noId: !id, _row: r._row, seller: clean(r['seller name']), originCity: clean(r['origin city']), originCountry: clean(r['origin country']),
       destCity: clean(r['destination city']), destCountry: clean(r['destination country']),
       destType: dtRaw ? (/ware/i.test(dtRaw) ? 'Warehouse' : 'Business address') : null,
       readyDate: parseDate(r['ready to ship date']), readyDateRaw: r['ready to ship date'],
@@ -484,16 +489,18 @@ function bookingsFromTables(bookingRows, itemRows, opts) {
   const byId = {}, seenRows = {};
   bookings.forEach((b, i) => {
     b._uid = i;
+    if (b._noId) return;
     const k = b.id.toLowerCase();
     (seenRows[k] = seenRows[k] || []).push(b._row);
     if (!byId[k]) byId[k] = b; else b._dupLater = true;
   });
-  bookings.forEach(b => { const rows = seenRows[b.id.toLowerCase()]; if (rows.length > 1) { b._dupCount = rows.length; b._dupRows = rows; } });
+  bookings.forEach(b => { if (b._noId) return; const rows = seenRows[b.id.toLowerCase()]; if (rows.length > 1) { b._dupCount = rows.length; b._dupRows = rows; } });
   const dupIds = Object.keys(seenRows).filter(k => seenRows[k].length > 1);
   dupIds.forEach(k => warnings.push('Booking ID “' + byId[k].id + '” appears ' + seenRows[k].length + ' times in the Bookings sheet (rows ' + seenRows[k].join(', ') + '). Each copy is flagged, and its items are linked to the first one.'));
   const orphan = {};
   it.forEach(r => {
-    const id = clean(r['booking id']); if (!id) return;
+    const id = normId(r['booking id']);
+    if (!id) { warnings.push('Items sheet, row ' + r._row + ' has no Booking ID, so it was ignored.'); return; }
     const b = byId[id.toLowerCase()];
     const item = {
       _row: r._row,

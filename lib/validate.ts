@@ -174,7 +174,7 @@ export function scanClaims(text: string): Claim[] {
     });
   }
   // HS code: "HS 000000", "HS code is -691200", "hs code: 69A200"
-  const hs = /\b(?:hs|tariff|commodity)(?:\s*code)?\s*(?:is|=|:)?\s*(-?[A-Za-z0-9][A-Za-z0-9.\s-]{0,18}?)(?=[,;]|\s+(?:and|but|made|from|at|per|each)\b|$|\.\s)/i.exec(work);
+  const hs = /\b(?:hs|tariff|commodity)(?:\s*code)?\s*(?:(?:is|to|as|be|should\s+be|=|:)\s*)*(-?[A-Za-z0-9][A-Za-z0-9.\s-]{0,18}?)(?=[,;]|\s+(?:and|but|made|from|at|per|each)\b|$|\.\s)/i.exec(work);
   if (hs && /\d/.test(hs[1])) out.push({ field: 'hs', raw: hs[1].trim() });
   return out;
 }

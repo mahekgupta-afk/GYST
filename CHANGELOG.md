@@ -73,6 +73,26 @@ R-01 to R-10, their severities and the rate card are unchanged. All three rules 
 - **Past date in a file stays Amber.** It is not upgraded to Red, so the judges' rulebook behaviour for R-10 is unchanged; only the booking step is blocked.
 - **The chat never stores a past date**, so the extra booking gate matters for uploaded files and in-app edits.
 
+## Upload fixes (messy-file retest)
+
+Tests: `tests/messy.test.tsx` builds a deliberately messy .xlsx and asserts the exact outcomes below, including a check of the rendered HTML (no "NaN", "Infinity" or "undefined" in the summary table or any booking page). The tests also confirm that the chat and "Fix it here" paths refuse the same values.
+
+**Bug 1: all-zero HS codes passing R-01.** Not reproducible on the current code: "000000", "0", "0000.00.00", 0, 0.0, "00 00 00", "000000.0", "-691200", "TBC", blank, whitespace and "N/A" all fail R-01 in a real .xlsx, "090111", "691200" and "6912.00" pass, and the message names the SKU, sheet and row. The fix was already in the previous release (commit 15dd7e6), so this was most likely seen on the build before it. One real defect turned up and is fixed: "change the HS code to 000000" in chat was read as the code "to 000000" and refused for the wrong reason; it is now refused as all zeros.
+
+**Bug 2: zero and negative numbers.** The input validation was also already in 15dd7e6 and passes every case: Quantity 0, Unit price -5, Unit weight 0, Units per carton 0, Cartons -5, Total declared value 0, Total gross weight -100, Pallets 0 and 2.5 are each their own Red input error naming booking, sheet, row, column and value, with the dependent checks (R-02, R-03, R-04, R-05, R-07) shown as n/a and explained. What was still wrong, and is fixed now, is the recommendation: a carrier and price were still shown from the pallets that were valid. When pallets or gross weight is invalid or missing, no carrier is recommended, the booking page says "Fix the input errors above to get a carrier recommendation", and the summary table shows "—" for that row (and the CSV and corrected-file exports leave it blank).
+
+**Bug 3: a row with a blank Booking ID was silently dropped.** A Bookings row with data and no ID is now kept, shown as "(no ID)" with a Red status, and given the Red input error "Bookings sheet, row N has no Booking ID. Add one and upload again." It cannot be booked. An Items row with data and no Booking ID gives the visible notice "Items sheet, row N has no Booking ID, so it was ignored." Completely blank rows (and whitespace-only rows) are still ignored with no notice. The number of bookings shown equals the number of non-empty Bookings rows.
+
+**P1: Booking IDs.** IDs are trimmed and shown upper-case everywhere ("  bk-002 " is BK-002). Matching between sheets stays case-insensitive and trimmed.
+
+**P2: why there is no carrier.** Plain-English message instead of a dash on the booking page and in chat.
+
+### Not changed, and why
+- **A booking with a valid pallet count and weight but other input errors** (for example a zero unit price) still shows its carrier and price. Your rule is that a carrier is withheld when pallets or gross weight is invalid; the price depends only on pallets, and the weight check only on weight.
+- **The "(no ID)" row also shows a carrier when its own numbers are valid.** It is still Red and cannot be booked. I did not hide it because its pallets and weight are valid.
+- **Duplicate-ID matching** is by the normalised ID, so "bk-003" and "BK-003" count as the same ID, as before.
+- **Blank numeric cells** remain "missing data" messages, not input errors.
+
 ## Not changed, and why
 
 - **No inline "edit description" fix for R-06.** Editing a description to dodge the restricted-goods check would defeat the rule. Removing the item is the only inline fix.

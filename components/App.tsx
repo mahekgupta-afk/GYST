@@ -101,6 +101,7 @@ export default function App() {
     if (lines.length) text += '\n' + lines.join('\n');
     const r = ev.rec;
     if (r.recommended) text += '\nRecommended carrier: ' + r.recommended.carrier + ' (' + r.recommended.service + '), ' + PF.gbp(r.recommended.price * r.pallets) + '.';
+    else if (r.blocked) text += '\nFix the input errors above to get a carrier recommendation.';
     else text += '\nNo carrier can take this weight per pallet. See the fix on the right.';
     text += '\nYou can change any detail, for example “add a pallet”.';
     prev.current = { red: ev.counts.red, amber: ev.counts.amber };

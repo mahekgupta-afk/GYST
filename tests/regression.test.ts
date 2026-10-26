@@ -308,7 +308,7 @@ describe('10. official template and multi-booking files (B1, B5)', () => {
   it('works with headers in row 1, blank rows, whitespace rows, odd sheet case and extra reference sheets', () => {
     const r = parse({ titleRow: false, bookings: [book('BK-001'), [null, '  ', null], book('bk-002')], items: [itm('BK-001'), [], itm('BK-002')], bookingsName: ' bookings ', itemsName: 'ITEMS', extraSheets: true });
     expect(r.error).toBeUndefined();
-    expect(r.bookings.map((b: any) => b.id)).toEqual(['BK-001', 'bk-002']);
+    expect(r.bookings.map((b: any) => b.id)).toEqual(['BK-001', 'BK-002']);   // IDs are trimmed and shown upper-case
     expect(r.bookings[1].items).toHaveLength(1);                 // IDs link case-insensitively
   });
   it('five bookings (clean, single mistakes, several mistakes) each get their own result, with sheet rows', () => {

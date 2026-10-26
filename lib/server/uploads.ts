@@ -33,7 +33,7 @@ export function analyse(name: string, bytes: Buffer): Analysis | Rejected {
   const results = parsed.bookings.map((b: any) => {
     const ev = PF.evaluate(b);
     return {
-      id: String(b.id), seller: b.seller ?? null, status: ev.status, red: ev.counts.red, amber: ev.counts.amber,
+      id: String(b.id || '(no ID)'), seller: b.seller ?? null, status: ev.status, red: ev.counts.red, amber: ev.counts.amber,
       issues: ev.issues.map((i: any) => ({ rule: i.rule, sev: i.sev, item: i.item ?? null, title: i.title })),
     };
   });

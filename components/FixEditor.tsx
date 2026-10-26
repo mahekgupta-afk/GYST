@@ -137,6 +137,8 @@ export function QuickFix({ issue, b, ev, fix }: { issue: any; b: any; ev: any; f
       <Btn onClick={() => fix({ kind: 'set', field: 'readyDate', value: PF.todayISO(), rule })}>Collect today</Btn>
       <DateField onApply={d => fix({ kind: 'set', field: 'readyDate', value: d, rule })} />
     </>);
+  } else if (rule === 'INPUT' && !issue.field) {
+    body = <p className="note">Add the Booking ID in your file and upload it again. This row can’t be booked without one.</p>;
   } else if (rule === 'INPUT') {
     const fk = issue.field as FieldKey;
     const key = fk === 'itemCartons' ? 'cartons' : fk;
