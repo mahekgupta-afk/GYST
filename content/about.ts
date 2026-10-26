@@ -15,7 +15,7 @@ export type AboutContent = {
   whatWeCheck: { title: string; items: string[] };
   scope: { title: string; items: string[] };
   team: { title: string; intro: string; members: Member[] };
-  contact: { title: string; email: string; phone: string; phoneLink: string };
+  contact: { title: string; email: string; phone: string; phoneLink: string; emailLabel?: string; phoneLabel?: string };
 };
 
 export const about: AboutContent = {
@@ -90,5 +90,7 @@ export const about: AboutContent = {
     email: "Getyouship2gether@hotmail.in",
     phone: "+44 987-654-3210",
     phoneLink: "+449876543210", // used for the tap-to-call link
+    emailLabel: "Email",
+    phoneLabel: "Telephone",
   },
 };

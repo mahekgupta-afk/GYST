@@ -43,10 +43,10 @@ export default function About({ content = defaultContent }: { content?: AboutCon
       </ul>
 
       <h3>{c.contact.title}</h3>
-      <p>
-        <a href={'mailto:' + c.contact.email}>{c.contact.email}</a><br />
-        <a href={'tel:' + c.contact.phoneLink}>{c.contact.phone}</a>
-      </p>
+      <dl className="about-contact">
+        <div><dt>{c.contact.emailLabel || 'Email'}</dt><dd><a href={'mailto:' + c.contact.email}>{c.contact.email}</a></dd></div>
+        <div><dt>{c.contact.phoneLabel || 'Telephone'}</dt><dd><a href={'tel:' + c.contact.phoneLink}>{c.contact.phone}</a></dd></div>
+      </dl>
     </section>
   );
 }

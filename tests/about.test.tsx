@@ -57,6 +57,11 @@ describe('About renders every item from the content file', () => {
     expect(tel.getAttribute('href')).toBe('tel:+449876543210');
     expect(container.querySelectorAll('form, input, textarea')).toHaveLength(0);
   });
+  it('contact is laid out as labelled rows (Email, Telephone) and the team cards keep a formal fixed width', () => {
+    const { container } = render(<About />);
+    expect([...container.querySelectorAll('.about-contact dt')].map(e => e.textContent)).toEqual(['Email', 'Telephone']);
+    expect(css).toMatch(/\.about-team \{[^}]*, 320px\)\)/);
+  });
   it('no placeholder text is left', () => {
     const { container } = render(<About />);
     expect(container.textContent).not.toMatch(/\[placeholder\]/i);
