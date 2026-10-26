@@ -27,10 +27,22 @@ const PAIRS: [string, string][] = [
 
 describe.each([['light', light], ['dark (system setting)', darkMedia], ['dark (chosen)', darkAttr]] as const)('%s theme', (_name, t) => {
   it('defines every token', () => {
-    for (const k of ['ink', 'ink2', 'ink3', 'canvas', 'paper', 'paper2', 'line', 'brand', 'brand-hover', 'brand-ink', 'brand-soft', 'red', 'red-bg', 'amber', 'amber-bg', 'green', 'green-bg', 'glow']) expect(t[k], k).toMatch(/^#[0-9a-f]{6}$/i);
+    for (const k of ['ink', 'ink2', 'ink3', 'canvas', 'paper', 'paper2', 'line', 'brand', 'brand-hover', 'brand-ink', 'brand-soft', 'red', 'red-bg', 'amber', 'amber-bg', 'green', 'green-bg', 'glow', 'tile-all', 'tile-red', 'tile-amber', 'tile-green', 'tile-booked']) expect(t[k], k).toMatch(/^#[0-9a-f]{6}$/i);
   });
   it.each(PAIRS)('%s on %s has at least 4.5:1 contrast (WCAG AA)', (fg, bg) => {
     expect(ratio(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
+  });
+  it.each(['all', 'red', 'amber', 'green', 'booked'])('the %s status tile has black or white text with at least 4.5:1 contrast on its fill', name => {
+    const fg = t['tile-' + name + '-text'] ?? t['tile-all-text'];
+    const bg = t['tile-' + name];
+    expect(['#000000', '#ffffff']).toContain(fg.toLowerCase());
+    expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
+  });
+  it('every filled tile stands out from the card it sits on (at least 3:1 on its edge or fill)', () => {
+    for (const name of ['red', 'amber', 'green', 'booked']) {
+      const edge = name === 'amber' ? t['tile-amber-edge'] : t['tile-' + name];
+      expect(ratio(edge, t.paper), name).toBeGreaterThanOrEqual(3);
+    }
   });
   it('has a visible border against the page', () => {
     expect(ratio(t.line, t.paper)).toBeGreaterThanOrEqual(1.1);

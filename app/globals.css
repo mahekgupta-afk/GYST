@@ -8,6 +8,7 @@
   --glow: #e2e8ff; --shadow: 0 1px 2px rgba(14, 22, 40, 0.05), 0 8px 24px rgba(14, 22, 40, 0.05);
   --display: var(--font-display), "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --body: var(--font-body), "Hanken Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --tile-all: #0e1628; --tile-all-text: #ffffff; --tile-red: #c0261c; --tile-red-text: #ffffff; --tile-amber: #f5b301; --tile-amber-text: #000000; --tile-amber-edge: #b07a00; --tile-green: #0e7c45; --tile-green-text: #ffffff; --tile-booked: #2748d6; --tile-booked-text: #ffffff;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -17,6 +18,7 @@
     --brand: #86a2ff; --brand-hover: #a9bdff; --brand-ink: #0a1020; --brand-soft: #1b2a55;
     --red: #ff8f86; --red-bg: #3b181b; --amber: #f7bd55; --amber-bg: #3a2b0c; --green: #5fd69a; --green-bg: #0e3323;
     --glow: #101c42; --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 28px rgba(0, 0, 0, 0.35);
+    --tile-all: #eaf0fb; --tile-all-text: #000000; --tile-red: #ff8277; --tile-red-text: #000000; --tile-amber: #f7bd55; --tile-amber-text: #000000; --tile-amber-edge: #f7bd55; --tile-green: #52d08e; --tile-green-text: #000000; --tile-booked: #86a2ff; --tile-booked-text: #000000;
     color-scheme: dark;
   }
 }
@@ -26,6 +28,7 @@
   --brand: #86a2ff; --brand-hover: #a9bdff; --brand-ink: #0a1020; --brand-soft: #1b2a55;
   --red: #ff8f86; --red-bg: #3b181b; --amber: #f7bd55; --amber-bg: #3a2b0c; --green: #5fd69a; --green-bg: #0e3323;
   --glow: #101c42; --shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 28px rgba(0, 0, 0, 0.35);
+  --tile-all: #eaf0fb; --tile-all-text: #000000; --tile-red: #ff8277; --tile-red-text: #000000; --tile-amber: #f7bd55; --tile-amber-text: #000000; --tile-amber-edge: #f7bd55; --tile-green: #52d08e; --tile-green-text: #000000; --tile-booked: #86a2ff; --tile-booked-text: #000000;
   color-scheme: dark;
 }
 :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -144,13 +147,18 @@ tr.click:focus-visible { outline: 3px solid var(--brand); outline-offset: -3px; 
 .progress { height: 8px; background: var(--paper2); border-radius: 99px; overflow: hidden; border: 1px solid var(--line); margin: 0 0 14px; }
 .progress i { display: block; height: 100%; background: var(--brand); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.tile { border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; background: var(--paper2); text-align: left; cursor: pointer; font: inherit; color: inherit; }
-.tile:hover { border-color: var(--ink3); }
-.tile.on { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); background: var(--brand-soft); }
-.tile:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.tile b { display: block; font: 800 28px/1.1 var(--display); }
-.tile.red b { color: var(--red); } .tile.amber b { color: var(--amber); } .tile.green b, .tile.booked b { color: var(--green); }
-.tile span { font-size: 13px; color: var(--ink2); }
+/* Status tiles: filled with their status colour, with black or white text chosen for contrast (checked in tests/theme.test.tsx). */
+.tile { border: 1px solid var(--tile-edge, var(--line)); border-radius: 10px; padding: 10px 14px; background: var(--tile-bg, var(--paper2)); color: var(--tile-fg, var(--ink)); text-align: left; cursor: pointer; font: inherit; transition: transform .08s, box-shadow .12s; }
+.tile.red { --tile-bg: var(--tile-red); --tile-fg: var(--tile-red-text); --tile-edge: var(--tile-red); }
+.tile.amber { --tile-bg: var(--tile-amber); --tile-fg: var(--tile-amber-text); --tile-edge: var(--tile-amber-edge); }
+.tile.green { --tile-bg: var(--tile-green); --tile-fg: var(--tile-green-text); --tile-edge: var(--tile-green); }
+.tile.booked { --tile-bg: var(--tile-booked); --tile-fg: var(--tile-booked-text); --tile-edge: var(--tile-booked); }
+.tile:hover { transform: translateY(-1px); }
+.tile.on { box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
+.tile:not(.red):not(.amber):not(.green):not(.booked).on { --tile-bg: var(--tile-all); --tile-fg: var(--tile-all-text); --tile-edge: var(--tile-all); }
+.tile:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
+.tile b { display: block; font: 800 28px/1.1 var(--display); color: inherit; }
+.tile span { font-size: 13px; color: inherit; }
 .warnbox { background: var(--amber-bg); color: var(--ink); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 14px; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .adv { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 12px; }

@@ -127,6 +127,10 @@ Tests: `tests/messy.test.tsx` builds a deliberately messy .xlsx and asserts the 
 - The theme control is on every screen but is not a setting stored on the server, so a choice does not follow someone to another device.
 - Colours inside the downloaded Excel and CSV files are not themed (they have none).
 
+## Solid status tiles
+
+The summary tiles (All, Red, Amber, Green, Booked) are now filled with their status colour, with plain black or white text chosen for contrast: white on red, green, blue (booked) and the dark "All" tile in light mode, black on amber, and black on all of them in dark mode. The selected tile gets a two-tone ring that does not rely on colour. `tests/theme.test.tsx` checks that the text on every tile is exactly black or white with at least 4.5:1 contrast in both themes, and that each filled tile stands out from the card behind it (the amber tile gets a darker edge in light mode because a bright yellow on white is hard to see otherwise).
+
 ## Not changed, and why
 
 - **No inline "edit description" fix for R-06.** Editing a description to dodge the restricted-goods check would defeat the rule. Removing the item is the only inline fix.
