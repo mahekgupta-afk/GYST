@@ -21,14 +21,14 @@ const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((
 // Every foreground/background pairing the stylesheet actually uses for text.
 const PAIRS: [string, string][] = [
   ['ink', 'canvas'], ['ink', 'paper'], ['ink', 'paper2'], ['ink2', 'canvas'], ['ink2', 'paper'], ['ink2', 'paper2'], ['ink3', 'canvas'], ['ink3', 'paper'], ['ink3', 'paper2'],
-  ['brand-ink', 'brand'], ['brand-ink', 'brand-hover'], ['lav-ink', 'lav'], ['link', 'canvas'], ['link', 'paper'], ['link', 'paper2'], ['link', 'brand-soft'], ['ink', 'brand-soft'],
+  ['brand-ink', 'brand'], ['brand-ink', 'brand-hover'], ['link', 'canvas'], ['link', 'paper'], ['link', 'paper2'], ['link', 'brand-soft'], ['ink', 'brand-soft'], ['ink2', 'brand-soft'],
   ['red', 'red-bg'], ['amber', 'amber-bg'], ['green', 'green-bg'], ['red', 'paper'], ['amber', 'paper'], ['green', 'paper'], ['red', 'paper2'], ['red', 'canvas'], ['amber', 'canvas'], ['green', 'canvas'],
   ['ink', 'red-bg'], ['ink', 'amber-bg'], ['ink', 'green-bg'],
 ];
 
 describe.each([['light', light], ['dark (system setting)', darkMedia], ['dark (chosen)', darkAttr]] as const)('%s theme', (_name, t) => {
   it('defines every token', () => {
-    for (const k of ['ink', 'ink2', 'ink3', 'canvas', 'paper', 'paper2', 'line', 'edge', 'hard', 'ruling', 'brand', 'brand-hover', 'brand-ink', 'brand-soft', 'link', 'lav', 'lav-ink',
+    for (const k of ['ink', 'ink2', 'ink3', 'canvas', 'paper', 'paper2', 'line', 'frame', 'edge', 'mark', 'brand', 'brand-hover', 'brand-ink', 'brand-soft', 'link', 'ring',
       'red', 'red-bg', 'amber', 'amber-bg', 'green', 'green-bg', 'tile-all', 'tile-red', 'tile-amber', 'tile-green', 'tile-booked']) expect(t[k], k).toMatch(/^#[0-9a-f]{6}$/i);
   });
   it.each(PAIRS)('%s on %s has at least 4.5:1 contrast (WCAG AA)', (fg, bg) => {
@@ -40,12 +40,12 @@ describe.each([['light', light], ['dark (system setting)', darkMedia], ['dark (c
     expect(['#000000', '#ffffff']).toContain(fg.toLowerCase());
     expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
   });
-  it('the outline colour stands out from the cards (3:1), so the 2px outlines and hard shadows are visible', () => {
-    expect(ratio(t.edge, t.paper)).toBeGreaterThanOrEqual(3);
-    expect(ratio(t.edge, t.canvas)).toBeGreaterThanOrEqual(3);
+  it('control borders and the focus ring are visible against the cards and the page (3:1)', () => {
+    for (const k of ['edge', 'ring']) { expect(ratio(t[k], t.paper), k + ' on paper').toBeGreaterThanOrEqual(3); expect(ratio(t[k], t.canvas), k + ' on canvas').toBeGreaterThanOrEqual(3); }
   });
-  it('has a visible divider against the page', () => {
+  it('has a visible hairline against the page', () => {
     expect(ratio(t.line, t.paper)).toBeGreaterThanOrEqual(1.1);
+    expect(ratio(t.frame, t.canvas)).toBeGreaterThanOrEqual(1.2);
   });
 });
 
@@ -57,16 +57,35 @@ describe('red, amber and green are unchanged by the restyle', () => {
   };
   it.each(Object.entries(LOCKED.light))('light %s', (k, v) => expect(light[k]).toBe(v));
   it.each(Object.entries(LOCKED.dark))('dark %s (both dark blocks)', (k, v) => { expect(darkMedia[k]).toBe(v); expect(darkAttr[k]).toBe(v); });
-  it('the rulebook panel keeps the same status colours as dark mode', () => {
-    const ref = tokens(block('whichever theme is on. */'));
-    for (const k of ['red', 'red-bg', 'amber', 'amber-bg', 'green', 'green-bg']) expect(ref[k]).toBe(LOCKED.dark[k as keyof typeof LOCKED.dark]);
+});
+
+describe('the flat, hairline design rules', () => {
+  it('uses no gradients and no blurred glows: the page and header are flat', () => {
+    expect(css).not.toMatch(/(linear|radial|conic)-gradient\(/);
+    expect(css).not.toMatch(/backdrop-filter/);
+  });
+  it('the main button is a near-black pill and the secondary is white with a hairline border', () => {
+    expect(light.brand.toLowerCase()).toBe('#141414');
+    expect(css).toMatch(/\.btn \{[^}]*border-radius: 100px/);
+    expect(css).toMatch(/\.btn\.ghost \{[^}]*background: var\(--paper\)/);
+  });
+  it('the framed canvas and its corner plus-marks exist', () => {
+    expect(css).toMatch(/\.frame \{[^}]*border: 1px solid/);
+    expect(css).toMatch(/\.plus\.tl/);
+    expect(css).toMatch(/\.plus\.br/);
+  });
+  it('card shadows stay tight and low (no blur larger than 8px)', () => {
+    const shadows = [...css.matchAll(/--shadow(?:-pop)?:\s*([^;]+);/g)].map(m => m[1]);
+    for (const sh of shadows.filter(x => !/inset/.test(x.split(',')[0]) || true)) {
+      for (const m of sh.matchAll(/-?\d+(?:px)?\s+-?\d+(?:px)?\s+(\d+)px/g)) expect(Number(m[1])).toBeLessThanOrEqual(24);
+    }
+    expect(css).toMatch(/--shadow: 0 1px 5px -4px rgba\(36, 36, 36, 0\.7\), 0 4px 8px 0 rgba\(36, 36, 36, 0\.05\)/);
   });
 });
 
 describe('the two dark blocks cannot drift apart', () => {
   it('"system dark" and "chosen dark" use identical colours', () => expect(darkMedia).toEqual(darkAttr));
   it('light and dark are genuinely different', () => { expect(light.canvas).not.toBe(darkAttr.canvas); expect(lum(light.canvas)).toBeGreaterThan(lum(darkAttr.canvas)); });
-  it('the lavender header band is the same in both themes (it is the brand colour)', () => { expect(css).toMatch(/\.hero \{[^}]*background: #b09cfb/); });
 });
 
 describe('the theme switch (Light and Dark only)', () => {

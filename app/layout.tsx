@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from 'next';
-import { Gasoek_One, Geist } from 'next/font/google';
+import { Cal_Sans, Inter } from 'next/font/google';
 import './globals.css';
 import { themeInitScript } from '@/lib/theme';
 
-// Gasoek One is the chunky display face (headlines, big numerals, the stamp). Geist is for everything else.
-const display = Gasoek_One({ subsets: ['latin'], variable: '--font-display', weight: '400' });
-const body = Geist({ subsets: ['latin'], variable: '--font-body' });
+// Cal Sans is the display face (headlines, big numerals, the stamp). Inter is for everything else.
+const display = Cal_Sans({ subsets: ['latin'], variable: '--font-display', weight: '400' });
+const body = Inter({ subsets: ['latin'], variable: '--font-body' });
 
 export const metadata: Metadata = {
   title: 'Get Your Ship Together: UK to EU shipment booking and error checker',
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = {
   width: 'device-width', initialScale: 1, viewportFit: 'cover',
-  themeColor: '#b09cfb',
+  themeColor: [{ media: '(prefers-color-scheme: light)', color: '#f4f4f4' }, { media: '(prefers-color-scheme: dark)', color: '#0e0e0f' }],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

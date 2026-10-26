@@ -59,12 +59,16 @@ export default function App() {
   useEffect(() => {
     const hero = document.querySelector('.hero') as HTMLElement | null;
     if (!hero) return;
-    const set = () => document.documentElement.style.setProperty('--chrome', Math.ceil(hero.getBoundingClientRect().height) + 28 + 'px');
+    const set = () => { const el = document.querySelector('.hero') as HTMLElement | null; if (el) document.documentElement.style.setProperty('--chrome', Math.ceil(el.getBoundingClientRect().height) + 84 + 'px'); };
     set();
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(set);
-    ro.observe(hero);
-    return () => ro.disconnect();
+    const raf = requestAnimationFrame(() => requestAnimationFrame(set));
+    const late = window.setTimeout(set, 400);
+    window.addEventListener('load', set);
+    window.addEventListener('resize', set);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(set).catch(() => {});
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(set);
+    if (ro) { ro.observe(hero); const nav = hero.firstElementChild; if (nav) ro.observe(nav); }
+    return () => { cancelAnimationFrame(raf); clearTimeout(late); window.removeEventListener('load', set); window.removeEventListener('resize', set); if (ro) ro.disconnect(); };
   }, []);
   useEffect(() => { const el = logEl.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs]);
   // Grow with the text. An empty box keeps its natural height (measuring it at page load could leave it stuck at the maximum).
@@ -296,25 +300,27 @@ export default function App() {
   const lastIdx = msgs.length - 1;
 
   return (
-    <>
+    <div className="frame">
+      <i className="plus tl" aria-hidden="true" /><i className="plus tr" aria-hidden="true" /><i className="plus bl" aria-hidden="true" /><i className="plus br" aria-hidden="true" />
       <header className="hero">
-        <div className="hero-in">
-          <nav className="nav" aria-label="App">
-            <div className="brandrow">
-              <span className="logo" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></svg>
-              </span>
-              <span className="wordmark">UK to EU shipments</span>
-            </div>
-            <div className="topside">
-              <ThemeToggle />
-              <div className="today">{today}</div>
-            </div>
-          </nav>
+        <nav className="nav" aria-label="App">
+          <div className="brandrow">
+            <span className="logo" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></svg>
+            </span>
+            <span className="wordmark">UK to EU shipments</span>
+          </div>
+          <div className="topside">
+            <ThemeToggle />
+            <div className="today">{today}</div>
+          </div>
+        </nav>
+        <div className="hero-copy">
+          <span className="eyebrow">Booking and pre-flight checks</span>
           <h1 className="brand">Get Your Ship Together</h1>
           <p className="tag">Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against the rulebook before it leaves.</p>
         </div>
-        <svg className="wave" viewBox="0 0 1440 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0,0 C180,38 360,38 540,20 C720,2 900,2 1080,20 C1260,38 1350,34 1440,18 L1440,40 L0,40 Z" /></svg>
+        <i className="plus l" aria-hidden="true" /><i className="plus r" aria-hidden="true" />
       </header>
 
       <div className="app">
@@ -402,6 +408,6 @@ export default function App() {
       </details>
       <p className="foot">Checks run in the browser using fixed rules, so the same booking always gets the same result. Delivery dates are estimates based on calendar days in transit.</p>
       </div>
-    </>
+    </div>
   );
 }

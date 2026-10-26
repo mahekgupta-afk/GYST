@@ -65,7 +65,11 @@ R-01 to R-10, their severities and the rate card are unchanged. All three rules 
 
 **Rule 3: past dates are not accepted.** Today is allowed; yesterday and earlier are not. Chat refuses explicit past dates and "yesterday", "last Friday", "2 days ago" and the like, in the same reply: "That date is in the past. Today is 26-10-2026. What date will the goods be ready?", keeps any earlier valid date, and applies to mid-conversation edits (including "change the ready date to yesterday", which used to bypass the check). Uploaded files keep R-10 as Amber with the same label and message, and no other result is dropped or changed, but a booking with a past date cannot be booked until the date is corrected: the Book button says "Fix the date to book", the warning cannot be acknowledged away, and the server refuses it (`past_date`). The date input and the date cell enforce today-or-later. An unreadable date is re-asked in chat, or reported with its row in a file.
 
-### Not changed, and why
+### Structured light scheduler restyle
+
+Visual only. Flat grey canvas, white cards with hairline borders and tight low shadows, a near-black pill button with a white outlined secondary, pill tabs, a framed page with corner plus-marks, and Cal Sans headings with Inter body text. Red, amber and green, their tints and the status tiles are unchanged and still locked by `tests/theme.test.tsx`; the booked tile is now blue. Differences from the design brief: dark mode is kept (you asked for light and dark), the brief's muted grey is darkened to pass 4.5:1 contrast, and the header is trimmed on phones so the message box is on screen when the page opens. Proved by: theme tests (contrast pairs, locked status colours, flat-design checks) and a manual phone check at 375x812 in both themes (no sideways scroll, message box visible).
+
+## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.
 - **Word numbers** ("three", "zero") are read in chat only. In spreadsheet cells and typed inputs they are text and are reported as "isn’t a number".
