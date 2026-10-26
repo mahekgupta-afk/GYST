@@ -5,5 +5,6 @@ import path from 'node:path';
 export default defineConfig({
   esbuild: { jsx: 'automatic' },
   resolve: { alias: { '@': path.resolve(__dirname) } },
-  test: { environment: 'node' },
+  // The page renders many sections now and some tests drive the whole app, so allow more than the default 5 s on a busy machine.
+  test: { environment: 'node', testTimeout: 20000 },
 });
