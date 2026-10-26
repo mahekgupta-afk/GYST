@@ -5,7 +5,6 @@
 //  - Run "npm run check:placeholders" before a release: it fails while any dummy-text tag is left in this folder.
 
 export type Way = { title: string; text: string };
-export type Member = { name: string; role: string; initials?: string };
 export type AboutContent = {
   heading: string;
   tagline: string;
@@ -14,7 +13,6 @@ export type AboutContent = {
   howItWorks: { title: string; steps: string[] };
   whatWeCheck: { title: string; items: string[] };
   scope: { title: string; items: string[] };
-  team: { title: string; intro: string; members: Member[] };
   contact: { title: string; email: string; phone: string; phoneLink: string; emailLabel?: string; phoneLabel?: string };
 };
 
@@ -73,15 +71,6 @@ export const about: AboutContent = {
       "Prices in GBP only",
       "Delivery dates are estimates based on calendar days in transit",
       "Bookings are recorded under a reference but are not yet transmitted to a carrier",
-    ],
-  },
-
-  team: {
-    title: "The team",
-    intro: "We are two partners.",
-    members: [
-      { name: "Mahek Gupta", role: "Partner", initials: "MG" },
-      { name: "Nirali Desai", role: "Partner", initials: "ND" },
     ],
   },
 

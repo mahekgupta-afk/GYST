@@ -12,7 +12,7 @@ import { about, type AboutContent } from '../content/about';
 
 afterEach(() => cleanup());
 const strings = (c: AboutContent) => [c.tagline, c.whatWeDo.intro, ...c.whatWeDo.ways.flatMap(w => [w.title, w.text]), c.why.text, ...c.howItWorks.steps, ...c.whatWeCheck.items, ...c.scope.items,
-  c.team.intro, ...c.team.members.flatMap(m => [m.name, m.role]), c.contact.email, c.contact.phone];
+  c.contact.email, c.contact.phone];
 const css = readFileSync('app/globals.css', 'utf8');
 
 describe('About renders every item from the content file', () => {
@@ -20,12 +20,12 @@ describe('About renders every item from the content file', () => {
     const { container } = render(<About />);
     for (const s of strings(about)) expect(container.textContent, s).toContain(s);
     const heads = [...container.querySelectorAll('h2, h3')].map(h => h.textContent);
-    expect(heads).toEqual(['About', 'What we do', 'Why we built it', 'How it works', 'What we check', 'Scope and limits', 'The team', 'Contact']);
+    expect(heads).toEqual(['About', 'What we do', 'Why we built it', 'How it works', 'What we check', 'Scope and limits', 'Contact']);
   });
   it('has one h2, h3 for the subsections and h4 only for the two ways', () => {
     const { container } = render(<About />);
     expect(container.querySelectorAll('h2')).toHaveLength(1);
-    expect(container.querySelectorAll('h3')).toHaveLength(7);
+    expect(container.querySelectorAll('h3')).toHaveLength(6);
     expect([...container.querySelectorAll('h4')].map(h => h.textContent)).toEqual(['Chat to book', 'Upload a file']);
     expect(container.querySelectorAll('h1')).toHaveLength(0);
   });
@@ -41,13 +41,11 @@ describe('About renders every item from the content file', () => {
     expect(about.whatWeCheck.items).toHaveLength(8);
     expect(about.scope.items).toHaveLength(4);
   });
-  it('shows exactly two team cards, with initials and no photos', () => {
+  it('has no team or partners section', () => {
     const { container } = render(<About />);
-    const cards = [...container.querySelectorAll('.about-person')];
-    expect(cards).toHaveLength(2);
-    expect(cards.map(c => c.textContent)).toEqual(['MGMahek GuptaPartner', 'NDNirali DesaiPartner']);
-    expect(container.querySelectorAll('img')).toHaveLength(0);
-    expect(container.textContent).not.toContain('Team Member');
+    expect(container.querySelectorAll('.about-person, .about-avatar, .about-team')).toHaveLength(0);
+    expect(container.textContent).not.toMatch(/partner|The team|Mahek|Nirali/i);
+    expect('team' in about).toBe(false);
   });
   it('contact has a mailto link and a tap-to-call link, and no form', () => {
     const { container } = render(<About />);
@@ -57,10 +55,9 @@ describe('About renders every item from the content file', () => {
     expect(tel.getAttribute('href')).toBe('tel:+449876543210');
     expect(container.querySelectorAll('form, input, textarea')).toHaveLength(0);
   });
-  it('contact is laid out as labelled rows (Email, Telephone) and the team cards keep a formal fixed width', () => {
+  it('contact is laid out as labelled rows (Email, Telephone)', () => {
     const { container } = render(<About />);
     expect([...container.querySelectorAll('.about-contact dt')].map(e => e.textContent)).toEqual(['Email', 'Telephone']);
-    expect(css).toMatch(/\.about-team \{[^}]*, 320px\)\)/);
   });
   it('no placeholder text is left', () => {
     const { container } = render(<About />);
@@ -69,13 +66,12 @@ describe('About renders every item from the content file', () => {
   });
   it('editing the content changes the output with no code change', () => {
     const edited: AboutContent = { ...about, tagline: 'Real tagline.', howItWorks: { ...about.howItWorks, steps: ['One real step.'] },
-      team: { ...about.team, members: [{ name: 'Asha Rao', role: 'Founder' }] }, contact: { ...about.contact, email: 'ask@shipco.example', phoneLink: '+441234' } };
+      contact: { ...about.contact, email: 'ask@shipco.example', phoneLink: '+441234' } };
     const { container } = render(<About content={edited} />);
     const t = container.textContent!;
     expect(t).toContain('Real tagline.');
     expect(t).not.toContain('Catch shipping mistakes');
     expect(container.querySelectorAll('ol.about-steps > li')).toHaveLength(1);
-    expect(container.querySelector('.about-avatar')!.textContent).toBe('AR');       // initials taken from the name
     expect(screen.getByRole('link', { name: 'ask@shipco.example' }).getAttribute('href')).toBe('mailto:ask@shipco.example');
     expect(screen.getByRole('link', { name: '+44 987-654-3210' }).getAttribute('href')).toBe('tel:+441234');
   });
@@ -92,12 +88,16 @@ describe('About renders every item from the content file', () => {
 describe('the About link', () => {
   beforeEach(() => { Element.prototype.scrollIntoView = vi.fn(); window.scrollTo = vi.fn() as any; vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{"enabled":false}', { status: 200 })))); });
   afterEach(() => vi.unstubAllGlobals());
-  it('scrolls to the section at the bottom of the page and marks it current', async () => {
+  it('scrolls to the section, which sits beside Carrier options, and marks it current', async () => {
     const App = (await import('../components/App')).default;
     render(<App />);
     const target = document.getElementById('about')!;
     expect(target.tagName).toBe('SECTION');
-    expect(target.parentElement!.lastElementChild).toBe(target);                  // last thing on the page
+    const row = target.parentElement!;
+    expect(row.className).toBe('pair');
+    expect([...row.children].map(e => e.id)).toEqual(['carriers', 'about']);       // side by side on wide screens
+    expect(css).toMatch(/\.pair \{[^}]*grid-template-columns: minmax\(0, 1\.4fr\) minmax\(0, 1fr\)/);
+    expect(css).toMatch(/@media \(max-width: 1100px\) \{ \.pair \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);       // stacked on narrow ones
     fireEvent.click(within(screen.getByRole('navigation', { name: 'App' })).getByRole('link', { name: 'About' }));
     expect((Element.prototype.scrollIntoView as any).mock.contexts.at(-1)).toBe(target);
     expect(within(screen.getByRole('navigation', { name: 'App' })).getByRole('link', { name: 'About' }).getAttribute('aria-current')).toBe('true');

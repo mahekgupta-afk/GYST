@@ -1,9 +1,5 @@
 import { about as defaultContent, type AboutContent } from '@/content/about';
 
-// Initials for a team circle: the ones given in the content file, otherwise taken from the name.
-const initialsOf = (name: string, given?: string) =>
-  (given && given.trim()) || name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
-
 /** The About section. It only renders `content` (content/about.ts by default): change the words there, not here. */
 export default function About({ content = defaultContent }: { content?: AboutContent }) {
   const c = content;
@@ -30,17 +26,6 @@ export default function About({ content = defaultContent }: { content?: AboutCon
         <div><h3>{c.whatWeCheck.title}</h3><ul>{c.whatWeCheck.items.map((t, i) => <li key={i}>{t}</li>)}</ul></div>
         <div><h3>{c.scope.title}</h3><ul>{c.scope.items.map((t, i) => <li key={i}>{t}</li>)}</ul></div>
       </div>
-
-      <h3>{c.team.title}</h3>
-      <p>{c.team.intro}</p>
-      <ul className="about-team">
-        {c.team.members.map((m, i) => (
-          <li key={i} className="about-person">
-            <span className="about-avatar" aria-hidden="true">{initialsOf(m.name, m.initials)}</span>
-            <span><b>{m.name}</b><br /><span className="muted">{m.role}</span></span>
-          </li>
-        ))}
-      </ul>
 
       <h3>{c.contact.title}</h3>
       <dl className="about-contact">

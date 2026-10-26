@@ -89,6 +89,10 @@ R-01 to R-10, their severities, the carrier rate card and all existing validatio
 
 Layout only. Team cards have a fixed, even width instead of stretching across the page; Contact is a bordered card of labelled rows (Email, Telephone, set in `content/about.ts`) with the same mailto and tel links; headings get more space above them. Wording is unchanged.
 
+## About beside Carrier options, team section removed
+
+Layout and content only. Carrier options and About now share a row on screens wider than 1100px (about 58% / 42%) and stack below that. The team section ("The team" and the two partner cards) is removed from `content/about.ts`, `components/About.tsx` and the stylesheet. The header highlight now follows whichever section's top has passed most recently, and keeps the current one when two sections share a row. Proved by: `tests/about.test.tsx` (no team content or cards, the two sections are siblings in one row, the stacking rule) and a browser check at 1360px and phone width.
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.

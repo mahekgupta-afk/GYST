@@ -89,10 +89,15 @@ export default function App() {
       window.setTimeout(() => {
         queued = false;
         const line = (parseFloat(document.documentElement.style.getPropertyValue('--nav-h')) || 64) + 120;
-        let at: 'app' | 'carriers' | 'rulebook' | 'about' = 'app';
-        for (const id of ['carriers', 'rulebook', 'about'] as const) { const el = document.getElementById(id); if (el && el.getBoundingClientRect().top <= line) at = id; }
-        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4 && document.getElementById('about')) at = 'about';
-        setSection(at);
+        // The section whose top has most recently passed the line. Carrier options and About can share a row, so on a tie keep the one already current.
+        let best = -Infinity; let tied: ('carriers' | 'rulebook' | 'about')[] = [];
+        for (const id of ['carriers', 'rulebook', 'about'] as const) {
+          const el = document.getElementById(id); if (!el) continue;
+          const top = Math.round(el.getBoundingClientRect().top);
+          if (top > line) continue;
+          if (top > best + 2) { best = top; tied = [id]; } else if (Math.abs(top - best) <= 2) tied.push(id);
+        }
+        setSection(prev => (tied.length === 0 ? 'app' : tied.includes(prev as any) ? prev : tied[0]));
       }, 60);
     };
     window.addEventListener('scroll', spy, { passive: true });
@@ -441,7 +446,10 @@ export default function App() {
         </section>
       </main>
 
-      <CarrierOptions onUse={useInBooking} />
+      <div className="pair">
+        <CarrierOptions onUse={useInBooking} />
+        <About />
+      </div>
 
       <details className="card ref" id="rulebook" ref={rulebookEl}>
         <summary>Rulebook and rate card used for every check</summary>
@@ -466,8 +474,6 @@ export default function App() {
         </div>
       </details>
       <p className="foot">Checks run in the browser using fixed rules, so the same booking always gets the same result. Delivery dates are estimates based on calendar days in transit.</p>
-
-      <About />
       </div>
     </div>
   );
