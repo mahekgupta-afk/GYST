@@ -176,6 +176,10 @@ Proved by: `tests/hs.test.ts` (real tariff responses saved as fixtures: every st
 
 "Scope and limits" now says what is real and what is simulated: confirmations and their PDFs are simulated and nothing is sent to a carrier, the ten rules are fixed and run in the browser with fixes previewed first, and the HS lookup is guidance only.
 
+## Missing details as a short red list in the chat
+
+When several details are missing, the bot now says "I still need:" and lists them as a numbered list in red (with one short example line in grey underneath), instead of one long sentence. Applies to the first questions (seller, route, delivery type, ready date, priority), the product details (price, units per carton, weight, HS code, country of origin) and the totals. A single missing detail is still asked as a plain question. The invoice reply is shorter too ("Here is what I read from your invoice. Please check it is right."). In `lib/parse/chat.ts` the three multi-detail questions gained `needs` and `example` fields next to their existing `q` text, which is unchanged, so nothing that read it is affected. A destination country is now confirmed in words ("delivering to Netherlands") instead of showing the field name. Proved by: `tests/needs-list.test.tsx`.
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.

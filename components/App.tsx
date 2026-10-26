@@ -16,7 +16,7 @@ import { suggestHs, verifyHs } from '@/lib/hsClient';
 import { descriptionLooksOff, shortText } from '@/lib/hs';
 import CarrierOptions, { type UseDetails } from './CarrierOptions';
 
-type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean; suggest?: { code: string; label: string }[] };
+type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean; needs?: string[]; example?: string; suggest?: { code: string; label: string }[] };
 const sig = (c: any) => JSON.stringify(Object.assign({}, c.b, { _confirmed: undefined }));
 const GREETING = 'Let’s get your shipment sorted. Tell me what you’re sending, in your own words, and I’ll only ask about what’s missing.\nOnce I have it, I’ll check the paperwork before it leaves and recommend the right carrier.\nI cover collections from London, Manchester, Birmingham and Leeds to Germany, France and the Netherlands.';
 
@@ -55,7 +55,7 @@ export default function App() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const setM = (m: Msg[]) => { msgsRef.current = m; setMsgs(m); };
-  const say = (role: Msg['role'], text: string, chips?: string[] | null, typing?: boolean) => setM([...msgsRef.current, { role, text, chips: chips || null, typing: !!typing }]);
+  const say = (role: Msg['role'], text: string, chips?: string[] | null, typing?: boolean, more?: Partial<Msg>) => setM([...msgsRef.current, { role, text, chips: chips || null, typing: !!typing, ...(more || {}) }]);
   const popMsg = () => setM(msgsRef.current.slice(0, -1));
   const thump = () => setThumpKey(k => k + 1);
 
@@ -132,8 +132,12 @@ export default function App() {
     return out;
   };
 
-  function compose(log: any, snap: any): { text: string; chips: string[] | null } {
+  type Reply = { text: string; chips: string[] | null; needs?: string[]; example?: string };
+  function compose(log: any, snap: any): Reply {
     const c = chat.current, a = c.asked;
+    // When several details are missing the bot lists them (shown as a short red numbered list) instead of one long sentence.
+    const qOf = (x: any) => (x && x.needs ? 'I still need:' : x?.q);
+    const listOf = (x: any) => (x && x.needs ? { needs: x.needs as string[], example: x.example as string } : {});
     const ack = C.ackText(log);
     const dp = log.dateProblem;
     const dateText = dp ? (dp.invalid ? '“' + dp.invalid + '” isn’t a real date. ' : '“' + dp.ambiguous + '” isn’t an exact date, so I haven’t saved one. ') + 'Please give me the day, for example 05-11-2026 or 5 Nov.' : '';
@@ -143,13 +147,13 @@ export default function App() {
     const refusals = (log.rejected || []).map((r: any) => r.message);
     if (refusals.length) return { text: [ack, extra, ...refusals].filter(Boolean).join('\n'), chips: null };
     if (!log.understood) {
-      if (extra) return { text: extra + (askAgain ? '\n' + a.q : ''), chips: a && askAgain ? a.chips : null };
-      return { text: 'Sorry, I didn’t catch that. ' + (a ? (a.hint || '') + a.q : 'You can say things like “add a pallet”, “change the priority to Fastest”, “use Carrier B” or “book it”.'), chips: a ? a.chips : completeChips(null) };
+      if (extra) return { text: extra + (askAgain ? '\n' + qOf(a) : ''), chips: a && askAgain ? a.chips : null, ...(askAgain ? listOf(a) : {}) };
+      return { text: 'Sorry, I didn’t catch that. ' + (a ? (a.hint || '') + qOf(a) : 'You can say things like “add a pallet”, “change the priority to Fastest”, “use Carrier B” or “book it”.'), chips: a ? a.chips : completeChips(null), ...listOf(a) };
     }
     let head = ack || (a ? '' : 'Noted.');
     if (extra) head = (head ? head + '\n' : '') + extra;
     if (a && !askAgain) return { text: head, chips: null };
-    if (a) return { text: (head ? head + '\n' : '') + a.q, chips: a.chips };
+    if (a) return { text: (head ? head + '\n' : '') + qOf(a), chips: a.chips, ...listOf(a) };
     const b = c.b;
     if (JSON.stringify(Object.assign({}, snap.b, { _confirmed: undefined })) !== sig(c)) b._confirmed = false;
     const ev = PF.evaluate(b);
@@ -257,7 +261,7 @@ export default function App() {
     }
     if (log.reset) { newBooking(); return; }
     const reply = compose(log, snap);
-    say('bot', reply.text, reply.chips);
+    say('bot', reply.text, reply.chips, false, { needs: reply.needs, example: reply.example });
     bump();
     void offerHs();
     if (pendingBook.current) { pendingBook.current = false; void bookChat(); }
@@ -295,7 +299,7 @@ export default function App() {
     if (!r.currency) notes.push('I couldn’t see a currency on the invoice, so I’ve treated the prices as £.');
     if (!log.set.length && !log.changed.length) { say('bot', [INVOICE_MESSAGES.empty, ...notes].join('\n'), chat.current.asked ? chat.current.asked.chips : null); bump(); return; }
     const reply = compose(log, snap);
-    say('bot', ['Here is what I read from your invoice. Please check it is right: the checks use it exactly as written, and you can tell me to change anything.', ...notes, reply.text].join('\n'), reply.chips);
+    say('bot', ['Here is what I read from your invoice. Please check it is right.', ...notes, reply.text].join('\n'), reply.chips, false, { needs: reply.needs, example: reply.example });
     bump();
     void offerHs();
   }
@@ -494,7 +498,11 @@ export default function App() {
             <div className="log" ref={logEl} role="log" aria-live="polite">
               {msgs.map((m, i) => (
                 <div key={i}>
-                  <div className={'msg ' + m.role + (m.typing ? ' typing' : '')}>{m.text.split('\n').map((l, k) => <p key={k}>{l}</p>)}</div>
+                  <div className={'msg ' + m.role + (m.typing ? ' typing' : '')}>
+                    {m.text.split('\n').map((l, k) => <p key={k}>{l}</p>)}
+                    {m.needs ? <ol className="needs" aria-label="Details I still need">{m.needs.map((n, k) => <li key={k}>{n}</li>)}</ol> : null}
+                    {m.needs && m.example ? <p className="needs-eg">{'You can answer in one message, for example “' + m.example + '”.'}</p> : null}
+                  </div>
                   {m.suggest && i === lastIdx && !busy ? (
                     <div className="hssuggest" role="group" aria-label="Suggested HS codes">
                       <span className="note">Suggested from the UK Tariff. Check one fits, or type your own:</span>

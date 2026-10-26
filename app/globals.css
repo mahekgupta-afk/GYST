@@ -147,6 +147,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
 .msg p + p { margin-top: 4px; }
 .msg.bot { background: var(--paper2); border-top-left-radius: 4px; align-self: flex-start; }
 .msg.user { background: var(--brand); color: var(--brand-ink); border-top-right-radius: 4px; align-self: flex-end; }
+.msg .needs { margin: 6px 0 4px; padding-left: 22px; display: grid; gap: 3px; color: var(--red); font-weight: 600; }
+.msg .needs li::marker { font-weight: 700; }
+.msg .needs-eg { margin-top: 6px; font-size: 12.5px; color: var(--ink-3); }
 .msg.typing { color: var(--ink3); font-style: italic; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; align-self: flex-start; }
 .chip { border: 1px solid var(--edge); background: var(--paper); color: var(--ink); border-radius: 999px; padding: 4px 12px; font-weight: 500; font-size: 13px; min-height: 32px; transition: background-color .15s ease-out, border-color .15s ease-out; }

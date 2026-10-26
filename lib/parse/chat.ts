@@ -322,7 +322,7 @@ function nextAsk(c) {
     };
     const parts = basics.map(k => label[k]);
     const list = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
-    return { key: 'basics', missing: basics, q: 'I still need ' + list + '. You can answer in one message, for example “Acme Ltd, Leeds to Paris, warehouse, appointment booked, ready 5 Nov, cheapest”.', hint: 'I collect from London, Manchester, Birmingham or Leeds, and deliver to Berlin, Frankfurt, Hamburg, Paris, Lyon, Amsterdam or Rotterdam. ' };
+    return { key: 'basics', missing: basics, needs: parts.map(t => t.charAt(0).toUpperCase() + t.slice(1)), example: 'Acme Ltd, Leeds to Paris, warehouse, appointment booked, ready 5 Nov, cheapest', q: 'I still need ' + list + '. You can answer in one message, for example “Acme Ltd, Leeds to Paris, warehouse, appointment booked, ready 5 Nov, cheapest”.', hint: 'I collect from London, Manchester, Birmingham or Leeds, and deliver to Berlin, Frankfurt, Hamburg, Paris, Lyon, Amsterdam or Rotterdam. ' };
   }
   if (!b.seller) return { key: 'seller', q: 'What’s your business name?' };
   if (!b.originCity && !b.destCity) return { key: 'route', hint: 'I can only book from London, Manchester, Birmingham or Leeds to Berlin, Frankfurt, Hamburg, Paris, Lyon, Amsterdam or Rotterdam. ', q: 'Where is it collected from, and where is it going? I can book from London, Manchester, Birmingham or Leeds to Germany, France or the Netherlands.' + (b.destCountry ? ' (I have the destination country as ' + b.destCountry + '.)' : '') };
@@ -355,7 +355,7 @@ function nextAsk(c) {
       if (!it.coo && !it.skipCOO) lack.push('country of origin');
       if (lack.length >= 3 && it.desc && it.qty != null) {
         const list = lack.slice(0, -1).join(', ') + ' and ' + lack[lack.length - 1];
-        return { key: 'item.details', itemIdx: i, q: 'For ' + itemName(it) + ' I still need the ' + list + '. For example “£5 each, 12 per carton, 0.5 kg each, HS 691200, made in UK”.', hint: 'Give each with its unit, like “£5 each”, “12 per carton”, “0.5 kg each”. ', chips: ['I don’t know the HS code or country'] };
+        return { key: 'item.details', itemIdx: i, needs: lack.map(t => t.charAt(0).toUpperCase() + t.slice(1)), example: '£5 each, 12 per carton, 0.5 kg each, HS 691200, made in UK', q: 'For ' + itemName(it) + ' I still need the ' + list + '. For example “£5 each, 12 per carton, 0.5 kg each, HS 691200, made in UK”.', hint: 'Give each with its unit, like “£5 each”, “12 per carton”, “0.5 kg each”. ', chips: ['I don’t know the HS code or country'] };
       }
       if (need === 'item.price') return { key: need, itemIdx: i, q: 'What’s the price per unit of ' + itemName(it) + ', in £?' };
       if (need === 'item.upc') return { key: need, itemIdx: i, q: 'How many units go in each carton?' };
@@ -374,13 +374,13 @@ function nextAsk(c) {
     if (miss.indexOf('grossWeight') >= 0) parts.push('the total gross weight in kg, including cartons and pallets' + (s.wt ? ' (the products alone weigh ' + nf(s.wt) + ' kg)' : ''));
     if (miss.indexOf('declaredValue') >= 0) parts.push('the total declared value in £' + (s.val ? ' (your products add up to ' + gbp(s.val) + ')' : ''));
     const list = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
-    return { key: 'totals', missing: miss, q: 'Almost there. I just need ' + list + '.', hint: 'Add a unit so I know which is which, for example “70 cartons”, “340 kg” or “£6,200”. ' };
+    return { key: 'totals', missing: miss, needs: parts.map(t => t.charAt(0).toUpperCase() + t.slice(1)), example: '70 cartons, 340 kg, £6,200', q: 'Almost there. I just need ' + list + '.', hint: 'Add a unit so I know which is which, for example “70 cartons”, “340 kg” or “£6,200”. ' };
   }
   return null;
 }
 
 /* ---------- applying changes ---------- */
-const LABEL = { seller: 'business name', originCity: 'collection city', destCity: 'destination', destType: 'destination type', readyDate: 'ready date', priority: 'priority', pallets: 'pallets', cartons: 'cartons', grossWeight: 'gross weight', declaredValue: 'declared value', appointment: 'delivery appointment', carrier: 'carrier',
+const LABEL = { seller: 'business name', originCity: 'collection city', destCountry: 'destination country', destCity: 'destination', destType: 'destination type', readyDate: 'ready date', priority: 'priority', pallets: 'pallets', cartons: 'cartons', grossWeight: 'gross weight', declaredValue: 'declared value', appointment: 'delivery appointment', carrier: 'carrier',
   desc: 'description', qty: 'quantity', price: 'unit price', upc: 'units per carton', unitWeight: 'unit weight', hs: 'HS code', coo: 'country of origin', cartonsItem: 'item cartons' };
 function show(field, v) {
   if (v == null) return '—';
@@ -671,7 +671,7 @@ function answerFor(ask, text, c, today) {
 function ackText(log) {
   const parts = [];
   const T = {
-    seller: v => v, originCity: v => 'collecting from ' + v, destCity: v => 'delivering to ' + v, destType: v => 'delivery type: ' + v, readyDate: v => 'ready on ' + v,
+    seller: v => v, originCity: v => 'collecting from ' + v, destCountry: v => 'delivering to ' + v, destCity: v => 'delivering to ' + v, destType: v => 'delivery type: ' + v, readyDate: v => 'ready on ' + v,
     priority: v => 'priority: ' + v, pallets: v => v + ' pallet' + (v === '1' ? '' : 's'), cartons: v => v + ' carton' + (v === '1' ? '' : 's'), grossWeight: v => v + ' gross',
     declaredValue: v => v + ' declared', appointment: v => v === 'Yes' ? 'delivery appointment booked' : 'no delivery appointment',
     desc: v => v, qty: v => Number(v).toLocaleString('en-GB') + ' units', price: v => v + ' each', upc: v => v + ' per carton', unitWeight: v => v + ' each',
