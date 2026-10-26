@@ -115,6 +115,18 @@ Tests: `tests/messy.test.tsx` builds a deliberately messy .xlsx and asserts the 
 - A request that has already succeeded on the server but whose reply never reached the browser shows "Nothing has been booked", which is wrong in that one case. The retry is safe (it returns the same booking, not a second one), but the first message cannot know. Making the message depend on a status lookup would add another network call to the same failing path.
 - The database timeout cuts off waiting, not the query itself, so a query that is already running may still finish in the background.
 
+## Light and dark mode, new colours
+
+**Theme switch.** A Light / Dark / System control in the header (icons only on a phone). Light and Dark are explicit choices; System follows the device and updates with it. The choice is saved in the browser and applied before the page first paints, so there is no flash of the wrong theme. If browser storage is blocked (some private windows) the choice still applies for that visit and nothing breaks. The browser's address-bar colour also follows the theme.
+
+**New palette.** A cooler off-white page with white cards and soft depth in light mode; a deep navy page with raised dark cards in dark mode. The primary colour is a clear blue (a lighter periwinkle in dark mode) instead of the previous dull navy, with hover and pressed states, and a small logo mark next to the title. Status colours (red, amber, green) are kept distinct and readable in both themes. Every text and background pair is at least WCAG AA (4.5:1); `tests/theme.test.tsx` reads the real stylesheet and checks all of them, checks the two dark blocks cannot drift apart, and tests the switch (including blocked storage and the no-flash script).
+
+**Also fixed.** The message box could get stuck at its maximum height because it measured itself once at page load; an empty box now keeps its natural height. A duplicated block of styles was removed.
+
+### Not changed, and why
+- The theme control is on every screen but is not a setting stored on the server, so a choice does not follow someone to another device.
+- Colours inside the downloaded Excel and CSV files are not themed (they have none).
+
 ## Not changed, and why
 
 - **No inline "edit description" fix for R-06.** Editing a description to dodge the restricted-goods check would defeat the rule. Removing the item is the only inline fix.

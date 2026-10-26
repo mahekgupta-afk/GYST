@@ -5,6 +5,7 @@ import { Detail, SheetCard, UploadResults, plural, type UploadHandlers } from '.
 import { applyChange, resetBooking, correctedRows, unacknowledged, issueKey, type Spec } from '@/lib/fixes';
 import { bookShipment } from '@/lib/bookingClient';
 import { fetchJson } from '@/lib/net';
+import ThemeToggle from './ThemeToggle';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
 const sig = (c: any) => JSON.stringify(Object.assign({}, c.b, { _confirmed: undefined }));
@@ -55,7 +56,8 @@ export default function App() {
   }, [greet]);
 
   useEffect(() => { const el = logEl.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs]);
-  useEffect(() => { const t = inputEl.current; if (t) { t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; } }, [input]);
+  // Grow with the text. An empty box keeps its natural height (measuring it at page load could leave it stuck at the maximum).
+  useEffect(() => { const t = inputEl.current; if (!t) return; if (!input) { t.style.height = ''; return; } t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; }, [input]);
 
   const completeChips = (ev: any) => {
     if (chat.current.b._confirmed) return ['Start a new booking'];
@@ -285,11 +287,19 @@ export default function App() {
   return (
     <div className="app">
       <header className="top">
-        <div>
-          <h1 className="brand">Get Your Ship Together</h1>
-          <p className="tag">Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against the rulebook before it leaves.</p>
+        <div className="brandrow">
+          <span className="logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></svg>
+          </span>
+          <div>
+            <h1 className="brand">Get Your Ship Together</h1>
+            <p className="tag">Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against the rulebook before it leaves.</p>
+          </div>
         </div>
-        <div className="today">{today}</div>
+        <div className="topside">
+          <ThemeToggle />
+          <div className="today">{today}</div>
+        </div>
       </header>
 
       <main className="grid">
