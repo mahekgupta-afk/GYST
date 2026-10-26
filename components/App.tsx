@@ -299,7 +299,7 @@ export default function App() {
     setBookBusy(true); delete b._bookError; bump();
     try {
       const r = await bookShipment(b, source, fileName);
-      if (r.ok) { b._confirmed = true; b._ref = r.reference; b._saved = r.saved; delete b._bookError; }
+      if (r.ok) { b._confirmed = true; b._ref = r.reference; b._saved = r.saved; b._confirmation = r.confirmation || null; b._accessKey = r.accessKey || null; delete b._bookError; }
       else b._bookError = r.message;
       return r;
     } finally {

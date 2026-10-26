@@ -36,3 +36,7 @@ CREATE INDEX IF NOT EXISTS bookings_created_at_idx ON bookings (created_at DESC)
 -- A retried booking request (same key) returns the first booking instead of creating a second one.
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS idempotency_key text;
 CREATE UNIQUE INDEX IF NOT EXISTS bookings_idempotency_key_idx ON bookings (idempotency_key);
+
+-- The confirmation exactly as it was when booked (simulated: not transmitted to a carrier), and the secret that opens it from a link.
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS confirmation jsonb;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS access_key text;

@@ -52,5 +52,8 @@ export function ensureSchema(): Promise<void> {
     await q`CREATE INDEX IF NOT EXISTS bookings_created_at_idx ON bookings (created_at DESC)`;
     await q`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS idempotency_key text`;
     await q`CREATE UNIQUE INDEX IF NOT EXISTS bookings_idempotency_key_idx ON bookings (idempotency_key)`;
+    // The confirmation as it was when booked, and the secret that opens it from a link.
+    await q`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS confirmation jsonb`;
+    await q`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS access_key text`;
   })(), 8000).catch(e => { ready = null; throw e; }));
 }

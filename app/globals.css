@@ -440,6 +440,29 @@ tr.pick td { background: rgba(246, 199, 68, 0.08); }
 .app-tool { padding-top: 40px; scroll-margin-top: calc(var(--nav-h, 70px) + 8px); }
 .app-tail { padding-top: 56px; }
 
+/* ---- booking confirmation ---- */
+.confirmation { display: grid; gap: 16px; }
+.simbanner { display: grid; gap: 4px; border: 1px solid var(--brand); border-left-width: 5px; border-radius: 12px; background: var(--accent-glow); padding: 12px 16px; font-size: 14px; }
+.simbanner b { font-size: 15px; }
+.simbanner span { color: var(--ink-2); }
+.confgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.confcard, .confblock { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; }
+.confcard h4, .confblock h4 { margin: 0 0 8px; font: 600 13px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); }
+.confblock p { margin: 0 0 6px; } .confblock ul { margin: 6px 0; padding-left: 20px; }
+.conf-carrier { margin: 0 0 8px; font: 700 20px/1.2 var(--font-display); }
+.confirm-link { overflow-wrap: anywhere; font-size: 12.5px; }
+.timeline { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 0; }
+.timeline li { position: relative; display: grid; grid-template-columns: 22px 1fr auto; gap: 4px 12px; align-items: baseline; padding: 8px 0 14px; color: var(--ink-3); }
+.timeline li:not(:last-child)::before { content: ""; position: absolute; left: 7px; top: 24px; bottom: -2px; width: 2px; background: var(--border-active); }
+.timeline .tl-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border-active); background: var(--bg); align-self: center; position: relative; z-index: 1; }
+.timeline li.active { color: var(--ink); }
+.timeline li.active .tl-dot { background: var(--green); border-color: var(--green); box-shadow: 0 0 8px var(--green); }
+.timeline .tl-label { font-weight: 600; }
+.timeline .tl-date { font: 500 13px/1.3 var(--mono); }
+.bookingpage { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; display: grid; gap: 16px; }
+.bookingpage-h { font: 700 clamp(28px, 4vw, 40px)/1.15 var(--font-display); margin: 0; }
+@media (max-width: 560px) { .timeline li { grid-template-columns: 22px 1fr; } .timeline .tl-date { grid-column: 2; } .bookingpage { padding: 20px 16px 48px; } }
+
 /* ---- scroll reveal ---- */
 .reveal { transition: opacity .6s ease, transform .6s ease; }
 .reveal.is-hidden { opacity: 0; transform: translateY(26px); }

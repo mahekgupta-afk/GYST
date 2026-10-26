@@ -4,24 +4,14 @@ import { PF, C } from '@/lib/pf';
 import { hasChanges, canBook, hasPastDate, unacknowledged, issueKey, type Spec, type Change, type ApplyResult } from '@/lib/fixes';
 import { QuickFix, EditableSheet } from './FixEditor';
 import { fetchJson } from '@/lib/net';
+import ConfirmationPanel from './ConfirmationPanel';
+import PdfButton from './PdfButton';
+import { buildConfirmation, type Confirmation as ConfirmationData } from '@/lib/confirmation';
 
 export const plural = (n: number, w: string, p?: string) => n + ' ' + (n === 1 ? w : p || w + 's');
 export type Opts = { fix: (s: Spec) => ApplyResult | void; book: () => void; reset: () => void; booking: boolean; ack: (keys: string[]) => void; example?: boolean };
 
 /* ---------- shared pieces ---------- */
-/** A button that builds a PDF in the browser. The PDF code is only loaded when it is clicked; a failure shows a friendly message. */
-export function PdfButton({ label, run, small = true }: { label: string; run: () => Promise<void>; small?: boolean }) {
-  const [state, setState] = useState<'idle' | 'busy' | 'error'>('idle');
-  return (
-    <span className="pdfbtn">
-      <button type="button" className={'btn ghost' + (small ? ' small' : '')} disabled={state === 'busy'}
-        onClick={async () => { setState('busy'); try { await run(); setState('idle'); } catch { setState('error'); } }}>
-        {state === 'busy' ? 'Preparing PDF…' : label}
-      </button>
-      {state === 'error' ? <span className="fixerr" role="alert">The PDF could not be created. Please try again.</span> : null}
-    </span>
-  );
-}
 
 function RuleStrip({ ev }: { ev: any }) {
   const t: Record<string, string> = { pass: 'Pass', red: 'Fail', amber: 'Warn', na: 'n/a' };
@@ -139,22 +129,14 @@ function CarrierSection({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
 export const idLabel = (b: any) => (b && b.id ? b.id : '(no ID)');
 const iso = (d: string | null) => (d ? PF.dmy(d) : '—');
 function BookedSummary({ b, ev }: { b: any; ev: any }) {
-  const sel = ev.rec.selected, eta = b.readyDate ? PF.addDays(b.readyDate, sel.transit) : null;
-  const acked = (b._acks || []).length ? ev.issues.filter((i: any) => i.sev === 'amber' && (b._acks || []).includes(issueKey(i))) : [];
+  // The server's stored confirmation when there is one; otherwise built here from the same booking, with the same builder.
+  const c: ConfirmationData = b._confirmation || buildConfirmation(b, ev, { reference: b._ref });
+  const link = b._accessKey && b._saved !== false && typeof window !== 'undefined' ? window.location.origin + '/booking/' + encodeURIComponent(b._ref) + '?k=' + encodeURIComponent(b._accessKey) : null;
   return (
-    <div className="confirmed" role="status">
-      <b>{'Booked. Reference ' + b._ref}</b>
-      <dl className="sheet" style={{ marginTop: 10 }}>
-        <div><dt>Route</dt><dd>{(b.originCity || 'UK') + ' to ' + (b.destCity || b.destCountry)}</dd></div>
-        <div><dt>Carrier</dt><dd>{sel.carrier + ' · ' + sel.service}</dd></div>
-        <div><dt>Pallets</dt><dd>{ev.rec.pallets}</dd></div>
-        <div><dt>Total price</dt><dd>{PF.gbp(sel.price * ev.rec.pallets) + ' (' + PF.gbp(sel.price) + ' × ' + ev.rec.pallets + ')'}</dd></div>
-        <div><dt>Collection</dt><dd>{iso(b.readyDate)}</dd></div>
-        <div><dt>Estimated delivery</dt><dd>{iso(eta) + ' (estimate: ' + plural(sel.transit, 'calendar day') + ' after collection)'}</dd></div>
-      </dl>
-      {acked.length ? <p style={{ margin: '8px 0 0' }}><b>Warnings you acknowledged:</b> {acked.map((i: any) => i.title + (i.item ? ' (' + i.item + ')' : '')).join('; ')}.</p> : null}
-      <p style={{ margin: '8px 0 0' }}>{b._saved === false ? 'This booking was checked but could not be saved to the booking log. ' : 'The booking is recorded under this reference. '}It has not been transmitted to a carrier.</p>
-    </div>
+    <>
+      <ConfirmationPanel c={c} link={link} />
+      {b._saved === false ? <p className="note">This booking was checked but could not be saved to the booking log, so it has no link to reopen it.</p> : null}
+    </>
   );
 }
 

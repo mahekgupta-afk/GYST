@@ -1,7 +1,8 @@
 import { PF } from './pf';
 import { fetchJson, TimeoutError } from './net';
+import type { Confirmation } from './confirmation';
 
-export type BookResult = { ok: true; reference: string; saved: boolean } | { ok: false; message: string; timedOut?: boolean };
+export type BookResult = { ok: true; reference: string; saved: boolean; confirmation?: Confirmation | null; accessKey?: string | null } | { ok: false; message: string; timedOut?: boolean };
 
 export const TOO_SLOW = 'That took too long. Nothing has been booked. Please try again.';
 
@@ -27,7 +28,7 @@ export async function bookShipment(b: any, source: 'chat' | 'upload', fileName?:
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ booking: b, source, fileName, key, today: PF.todayISO() }),
     });
-    if (res.ok && j.ok) return { ok: true, reference: j.reference, saved: !!j.saved };
+    if (res.ok && j.ok) return { ok: true, reference: j.reference, saved: !!j.saved, confirmation: j.confirmation || null, accessKey: j.accessKey || null };
     if (res.status === 422 && j.error === 'past_date') return { ok: false, message: 'The ready date is in the past. Change it to today or later before booking.' };
     if (res.status === 422 && j.error === 'warnings_not_acknowledged') return { ok: false, message: 'Please tick “I understand” for each warning before booking: ' + (j.problems || []).slice(0, 3).join('; ') + '.' };
     if (res.status === 422) return { ok: false, message: 'This booking still has problems that must be fixed first: ' + (j.problems || []).slice(0, 3).join('; ') + '.' };
