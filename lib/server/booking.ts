@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { PF } from '../pf';
 import { issueKey } from '../fixes';
 
@@ -34,6 +34,10 @@ export function checkBooking(input: any, clientToday?: string): BookingCheck {
   return { ok: true, ev, clean };
 }
 
+/** The same key always gives the same reference (on a given day), so a retried request cannot create a second booking. */
+export function referenceFor(key: string): string {
+  return 'GYST-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + createHash('sha256').update(key).digest('hex').slice(0, 6).toUpperCase();
+}
 export function newReference(): string {
   return 'GYST-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + randomBytes(3).toString('hex').toUpperCase();
 }

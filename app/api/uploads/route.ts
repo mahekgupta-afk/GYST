@@ -1,4 +1,4 @@
-import { dbEnabled, db, ensureSchema } from '@/lib/server/db';
+import { dbEnabled, db, ensureSchema, withTimeout } from '@/lib/server/db';
 import { allow, clientIp } from '@/lib/server/rateLimit';
 import { analyse, MAX_BYTES } from '@/lib/server/uploads';
 
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   if ('error' in a) return Response.json({ saved: false, reason: a.error }, { status: 422 });
 
   try {
-    await ensureSchema();
+    await withTimeout(ensureSchema(), 8000);
     const name = file.name.slice(0, 200);
     const rows = (await db()`
       INSERT INTO uploads (filename, size_bytes, sha256, file, booking_count, red_count, amber_count, clear_count, results)

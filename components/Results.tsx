@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { PF, C } from '@/lib/pf';
 import { hasChanges, canBook, hasPastDate, unacknowledged, issueKey, type Spec, type Change, type ApplyResult } from '@/lib/fixes';
 import { QuickFix, EditableSheet } from './FixEditor';
+import { fetchJson } from '@/lib/net';
 
 export const plural = (n: number, w: string, p?: string) => n + ' ' + (n === 1 ? w : p || w + 's');
 export type Opts = { fix: (s: Spec) => ApplyResult | void; book: () => void; reset: () => void; booking: boolean; ack: (keys: string[]) => void };
@@ -256,9 +257,9 @@ function Advisory({ b }: { b: any }) {
   const ask = async () => {
     setBusy(true); setOut(null);
     try {
-      const res = await fetch('/api/second-opinion', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items: b.items.map((i: any) => ({ sku: i.sku, description: i.desc })) }) });
+      const { res, json } = await fetchJson('/api/second-opinion', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items: b.items.map((i: any) => ({ sku: i.sku, description: i.desc })) }) });
       if (!res.ok) throw new Error(String(res.status));
-      setOut(await res.json());
+      setOut(json);
     } catch { setOut({ error: true }); }
     setBusy(false);
   };
@@ -304,7 +305,8 @@ function StatusPills({ b, ev }: { b: any; ev: any }) {
   return <span className="pill green">Ready to book</span>;
 }
 
-export function exportCSV(bookings: any[]) {
+/** The issue list as CSV text (pure, so it can be tested). */
+export function csvText(bookings: any[]): string {
   const q = (v: any) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const out = [['Booking ID', 'Seller', 'Status', 'Rule', 'Severity', 'Item', 'Problem', 'What is wrong', 'How to fix', 'Recommended carrier', 'Total cost GBP'].map(q).join(',')];
   bookings.forEach(b => {
@@ -314,7 +316,10 @@ export function exportCSV(bookings: any[]) {
     if (!ev.issues.length) out.push(base.concat(['', '', '', 'No issues', '', ''], tail).map(q).join(','));
     ev.issues.forEach((i: any) => out.push(base.concat([i.rule, i.sev, i.item || '', i.title, i.what, i.fix], tail).map(q).join(',')));
   });
-  const url = URL.createObjectURL(new Blob([out.join('\n')], { type: 'text/csv;charset=utf-8' }));
+  return out.join('\n');
+}
+export function exportCSV(bookings: any[]) {
+  const url = URL.createObjectURL(new Blob([csvText(bookings)], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a');
   a.href = url; a.download = 'preflight-results.csv'; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);

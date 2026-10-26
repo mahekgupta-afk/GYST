@@ -4,6 +4,8 @@ import { allow, clientIp } from '@/lib/server/rateLimit';
 import { C } from '@/lib/pf';
 import { dropInventedTotals } from '@/lib/server/guard';
 
+export const maxDuration = 20;   // seconds; the browser gives up after 15
+
 export async function GET() {
   return Response.json({ enabled: geminiEnabled() });
 }

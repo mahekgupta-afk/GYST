@@ -4,6 +4,7 @@ import { PF, C } from '@/lib/pf';
 import { Detail, SheetCard, UploadResults, plural, type UploadHandlers } from './Results';
 import { applyChange, resetBooking, correctedRows, unacknowledged, issueKey, type Spec } from '@/lib/fixes';
 import { bookShipment } from '@/lib/bookingClient';
+import { fetchJson } from '@/lib/net';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
 const sig = (c: any) => JSON.stringify(Object.assign({}, c.b, { _confirmed: undefined }));
@@ -28,6 +29,7 @@ export default function App() {
   const [bookBusy, setBookBusy] = useState(false);
   const [bulk, setBulk] = useState<{ done: number; total: number } | null>(null);
   const pendingBook = useRef(false);
+  const inFlight = useRef<Set<any>>(new Set());
   const chat = useRef<any>(C.newChat());
   const prev = useRef<{ red: number; amber: number } | null>(null);
   const msgsRef = useRef<Msg[]>([]);
@@ -49,7 +51,7 @@ export default function App() {
   useEffect(() => {
     setToday('Checking against today, ' + PF.niceDate(PF.todayISO()));
     greet();
-    fetch('/api/parse-message').then(r => r.json()).then(j => { if (j && j.enabled) { setAiOn(true); } }).catch(() => {});
+    fetchJson('/api/parse-message').then(({ json }) => { if (json && json.enabled) { setAiOn(true); } }).catch(() => {});
   }, [greet]);
 
   useEffect(() => { const el = logEl.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs]);
@@ -110,14 +112,10 @@ export default function App() {
 
   /** Ask Gemini (via our server route) to read the message. Returns null on any failure. */
   async function readWithAI(c0: any, text: string, askQ: string | null) {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 14000);   // never leave the chat hanging on "Reading your message…"
-    let res: Response;
-    try { res = await fetch('/api/parse-message', { method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ booking: c0.b, text, askText: askQ }) }); }
-    finally { clearTimeout(timer); }
+    // 15 s limit (lib/net.ts): never leave the chat hanging on "Reading your message…". A timeout or error falls back to the built-in parser.
+    const { res, json } = await fetchJson('/api/parse-message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ booking: c0.b, text, askText: askQ }) });
     if (!res.ok) { const e: any = new Error('ai'); e.status = res.status; throw e; }
-    const { result } = await res.json();
-    return C.aiToEx(result, c0);
+    return C.aiToEx(json.result, c0);
   }
 
   async function send(textIn?: string) {
@@ -175,13 +173,26 @@ export default function App() {
   }
 
   /** Records a booking through the server, which re-checks the rulebook and refuses red bookings. */
+  /**
+   * Records a booking through the server, which re-checks the rulebook and refuses red bookings.
+   * One request at a time per booking (a second click while it is in flight does nothing), a 15 s limit,
+   * and the button always comes back: on failure all booking data is kept and an error is shown.
+   */
   async function bookOne(b: any, source: 'chat' | 'upload', fileName?: string) {
+    if (b._ref) return { ok: true as const, reference: b._ref, saved: b._saved !== false };
+    if (inFlight.current.has(b)) return { ok: false as const, message: 'Already booking.' };
+    inFlight.current.add(b);
     setBookBusy(true); delete b._bookError; bump();
-    const r = await bookShipment(b, source, fileName);
-    if (r.ok) { b._confirmed = true; b._ref = r.reference; b._saved = r.saved; delete b._bookError; }
-    else b._bookError = r.message;
-    setBookBusy(false); thump(); bump();
-    return r;
+    try {
+      const r = await bookShipment(b, source, fileName);
+      if (r.ok) { b._confirmed = true; b._ref = r.reference; b._saved = r.saved; delete b._bookError; }
+      else b._bookError = r.message;
+      return r;
+    } finally {
+      inFlight.current.delete(b);
+      setBookBusy(inFlight.current.size > 0);
+      thump(); bump();
+    }
   }
   async function bookChat() {
     const b = chat.current.b;
@@ -253,7 +264,7 @@ export default function App() {
     const form = new FormData();
     form.append('file', file);
     try {
-      const r = await fetch('/api/uploads', { method: 'POST', body: form });
+      const { res: r } = await fetchJson('/api/uploads', { method: 'POST', body: form });
       if (!r.ok && r.status !== 503 && r.status !== 422) setSaveNote('Your file has been checked, but a copy could not be saved.');
     } catch { setSaveNote('Your file has been checked, but a copy could not be saved.'); }
   }

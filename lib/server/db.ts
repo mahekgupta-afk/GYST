@@ -6,13 +6,18 @@ export const dbEnabled = () => !!process.env.DATABASE_URL;
 let sql: ReturnType<typeof neon> | null = null;
 let ready: Promise<void> | null = null;
 
+/** Rejects after `ms`. Used so a stalled database connection can never hold a request open. */
+export const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+  new Promise<T>((resolve, reject) => { const t = setTimeout(() => reject(new Error('db_timeout')), ms); p.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); }); });
+
 export function db() {
   return (sql ??= neon(process.env.DATABASE_URL as string));
 }
 
 /** Creates the table on first use so there is no separate migration step. */
 export function ensureSchema(): Promise<void> {
-  return (ready ??= (async () => {
+  // A stalled or failed setup is dropped (ready = null), so the next request tries again instead of waiting on it forever.
+  return (ready ??= withTimeout((async () => {
     const q = db();
     await q`CREATE TABLE IF NOT EXISTS uploads (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -45,5 +50,7 @@ export function ensureSchema(): Promise<void> {
       changes jsonb NOT NULL
     )`;
     await q`CREATE INDEX IF NOT EXISTS bookings_created_at_idx ON bookings (created_at DESC)`;
-  })().catch(e => { ready = null; throw e; }));
+    await q`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS idempotency_key text`;
+    await q`CREATE UNIQUE INDEX IF NOT EXISTS bookings_idempotency_key_idx ON bookings (idempotency_key)`;
+  })(), 8000).catch(e => { ready = null; throw e; }));
 }

@@ -27,7 +27,7 @@ const LABEL: Record<string, string> = {
 };
 
 // Transient UI state is left out of the snapshot; data that came from the file (_row, _uid, _dup*) and the carrier choice are kept.
-const TRANSIENT = new Set(['_orig', '_changes', '_confirmed', '_ref', '_saved', '_bookError', '_edited', '_acks']);
+const TRANSIENT = new Set(['_orig', '_changes', '_confirmed', '_ref', '_saved', '_bookError', '_edited', '_acks', '_idem', '_idemSig']);
 const strip = (b: any) => JSON.parse(JSON.stringify(b, (k, v) => (TRANSIENT.has(k) ? undefined : v)));
 
 /** Stable id for an issue, used to record which warnings the seller acknowledged. */

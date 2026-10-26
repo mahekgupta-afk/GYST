@@ -93,6 +93,28 @@ Tests: `tests/messy.test.tsx` builds a deliberately messy .xlsx and asserts the 
 - **Duplicate-ID matching** is by the normalised ID, so "bk-003" and "BK-003" count as the same ID, as before.
 - **Blank numeric cells** remain "missing data" messages, not input errors.
 
+## Review round 3: blank IDs, display IDs, recommendation, booking robustness
+
+**Items 1 to 3 were already shipped in commit 5fe9feb.** The live bundle at gyst-omega.vercel.app contains their strings, and they are covered again here by the exact fixtures from the review (`tests/review3.test.tsx`, 14 tests). If they looked unfixed, the retest probably ran before that build finished (about a minute after the push).
+
+**1. Blank Booking ID rows.** A Bookings row with data and no ID is kept, shown as "(no ID)" with a Red status and the Red input error "Bookings sheet, row N has no Booking ID. Add one and upload again."; it cannot be booked. An Items row with no ID gives the visible warning "Items sheet, row N has no Booking ID, so it was ignored." Entirely blank (or whitespace-only) rows are ignored without a notice. Fixture test: one clean booking, one row with data and a blank ID, one fully blank row gives 2 summary rows, the blank-ID row Red, and the blank row ignored. The bookings count equals the non-empty data rows.
+
+**2. Display IDs.** Trimmed and upper-cased everywhere: summary table, cards, issue text, the issue CSV and the corrected workbook (all three sheets). Matching between sheets stays case-insensitive and trimmed. Tested.
+
+**3. No carrier on unusable pallets or weight.** With pallets or gross weight at 0, negative, fractional, text or blank, nothing is recommended: no "Recommended" badge, no "scores highest / can take this load" text, the card says "Fix the input errors above to get a carrier recommendation.", and the summary table shows "—". When only other inputs are invalid (a zero unit price, a zero declared value) the load can still be assessed and the recommendation stays. Tested with 0 pallets, 2.5 pallets, a valid booking with gross weight -100, gross weight 0, blank pallets, blank gross weight and text pallets.
+
+**4. Booking robustness.**
+- **15-second limit on every network call for booking and chat parsing** (`lib/net.ts`): booking, the chat message reader, the AI-status check, upload storage and the second-opinion check. The whole request, including reading the reply, is raced against the timer, so a request that ignores abort is still given up on.
+- **On timeout or error** the button comes back, all booking data is kept, nothing is booked, and the seller sees "That took too long. Nothing has been booked. Please try again." (also used for network errors and 5xx replies; refusals keep their own specific messages). The chat reader falls back to the built-in parser, and "Reading your message…" and "Booking…" can no longer stay forever.
+- **No double booking.** The button is disabled while a request is in flight, a second click does nothing (an in-flight guard on the booking itself), and the request is idempotent: the browser sends one key per booking content (a new key if any data changes), the server derives the reference from it and stores it under a unique index, so a retry after a timeout returns the first booking instead of creating a second.
+- **Likely cause of the 45-second hangs, fixed.** The database setup step was cached as one shared promise, so if it stalled once, every later booking waited on it. It now has an 8 s limit and a failed or stalled setup is discarded and retried. The booking query has a 12 s limit and the routes have a 20 s `maxDuration`. This is the most plausible server-side cause, not a proven one, because I could not reproduce a 45 s stall.
+- **Tests.** `tests/booking-timeout.test.tsx` renders the real app, uploads a file, clicks Book shipment against a request that never answers, and asserts: "Booking…" with the button disabled while waiting, still waiting at 14 s, the exact message and a re-enabled "Book shipment" button after 15 s, no booking made, the booking still on screen, one request for two clicks, and a retry that succeeds with the same key. `tests/idempotency.test.ts` covers the server. An opt-in test (`RUN_DB_TESTS=1`, `tests/db-idempotency.live.test.ts`) ran against the real database: the same key twice gave one row and the same reference.
+- **Dev dependencies added:** `jsdom` (version 25, because 27 needs a newer Node than 20.18) and `@testing-library/react` / `@testing-library/dom`.
+
+### Not changed, and why
+- A request that has already succeeded on the server but whose reply never reached the browser shows "Nothing has been booked", which is wrong in that one case. The retry is safe (it returns the same booking, not a second one), but the first message cannot know. Making the message depend on a status lookup would add another network call to the same failing path.
+- The database timeout cuts off waiting, not the query itself, so a query that is already running may still finish in the background.
+
 ## Not changed, and why
 
 - **No inline "edit description" fix for R-06.** Editing a description to dodge the restricted-goods check would defeat the rule. Removing the item is the only inline fix.
