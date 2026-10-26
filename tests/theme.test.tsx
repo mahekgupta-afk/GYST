@@ -35,7 +35,7 @@ describe('the dark palette', () => {
   });
   it('uses the specified surfaces', () => {
     expect(t.bg).toBe('#080c14'); expect(t.surface).toBe('#0f1929'); expect(t['surface-2']).toBe('#162236');
-    expect(t.border).toBe('#1e3048'); expect(t['border-active']).toBe('#2a4570'); expect(t.accent).toBe('#3b82f6'); expect(t.ink).toBe('#f0f4f8');
+    expect(t.border).toBe('#1e3048'); expect(t['border-active']).toBe('#2a4570'); expect(t.accent).toBe('#f6c744'); expect(t.ink).toBe('#f0f4f8');
   });
   it.each(PAIRS)('%s on %s has at least 4.5:1 contrast (WCAG AA)', (fg, bg) => {
     expect(ratio(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
@@ -80,13 +80,17 @@ describe('dark only: no light mode, no theme switch', () => {
 });
 
 describe('shape and decoration', () => {
-  it('buttons, cards and the chat panel use a 6px radius and inputs 4px', () => {
-    expect(css).not.toMatch(/border-radius: (100|29|12|14|10)px/);
-    expect(css).toMatch(/\.btn \{[^}]*border-radius: 6px/);
-    expect(css).toMatch(/\.card \{[^}]*border-radius: 6px/);
-    expect(css).toMatch(/\.left \{[^}]*border-radius: 6px/);
-    expect(css).toMatch(/\.inp \{[^}]*border-radius: 4px/);
-    expect(css).toMatch(/\.logo \{[^}]*border-radius: 6px/);
+  it('buttons are pills, cards and the chat panel are rounded, inputs are softly rounded', () => {
+    expect(css).toMatch(/\.btn \{[^}]*border-radius: 999px/);
+    expect(css).toMatch(/\.navlink \{[^}]*border-radius: 999px/);
+    expect(css).toMatch(/\.card \{[^}]*border-radius: 14px/);
+    expect(css).toMatch(/\.left \{[^}]*border-radius: 18px/);
+    expect(css).toMatch(/\.inp \{[^}]*border-radius: 10px/);
+    expect(css).toMatch(/\.nav \{[^}]*border-radius: 999px/);          // the floating pill navbar
+  });
+  it('the primary button is the golden yellow with dark text', () => {
+    expect(t.brand).toBe('#f6c744');
+    expect(t['brand-ink']).toBe('#111827');
   });
   it('the old frame, corner marks, hero strip and rubber stamp are removed', () => {
     for (const sel of ['\\.frame', '\\.plus', '\\.hero', '\\.stamp', '\\.eyebrow']) expect(css, sel).not.toMatch(new RegExp(sel + '[ .{:,]'));

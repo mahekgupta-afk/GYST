@@ -9,7 +9,8 @@ import { parseExample } from '@/lib/example';
 import { readInvoice, INVOICE_MESSAGES } from '@/lib/invoiceClient';
 import Nav, { type NavKey } from './Nav';
 import About from './About';
-import LandingTerminal from './LandingTerminal';
+import { Hero, StatsStrip, WaysSection, ChecksSection, FeaturesSection } from './Home';
+import Footer from './Footer';
 import CarrierOptions, { type UseDetails } from './CarrierOptions';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
@@ -437,22 +438,12 @@ export default function App() {
     <>
       <Nav current={navCurrent} onGo={goTo} onNew={newBooking} today={today} />
 
-      <section className="landing" aria-labelledby="landing-h">
-        <div className="landing-inner">
-          <div className="landing-copy">
-            <div className="landing-eyebrow">UK–EU Freight &nbsp;·&nbsp; Pre-flight Compliance</div>
-            <h1 className="landing-h1" id="landing-h">Catch paperwork errors<br />before customs does.</h1>
-            <p className="landing-sub">Ten deterministic rules. Three carriers. Carrier recommendation based on your priority. Zero surprises at the border.</p>
-            <div className="landing-ctas">
-              <button type="button" className="btn landing-cta-primary" onClick={() => goTo('chat')}>Start booking →</button>
-              <button type="button" className="btn ghost landing-cta-secondary" onClick={() => goTo('upload')}>Upload your sheets</button>
-            </div>
-          </div>
-          <LandingTerminal />
-        </div>
-      </section>
+      <Hero onGo={goTo} />
+      <StatsStrip />
+      <WaysSection onGo={goTo} />
 
-      <div className="app">
+      <div className="app app-tool">
+        <h2 className="tool-h" id="tool-h">Book or check a shipment</h2>
 
       <main className="grid" id="start">
         <section className="card left" aria-label="Start a booking">
@@ -531,6 +522,12 @@ export default function App() {
           )}
         </section>
       </main>
+      </div>
+
+      <ChecksSection />
+      <FeaturesSection />
+
+      <div className="app app-tail">
 
       <CarrierOptions onUse={useInBooking} />
 
@@ -560,6 +557,8 @@ export default function App() {
 
       <About />
       </div>
+
+      <Footer onGo={goTo} />
     </>
   );
 }

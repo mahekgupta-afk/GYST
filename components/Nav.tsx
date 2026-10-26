@@ -25,9 +25,10 @@ export default function Nav({ current, onGo, onNew, today }: { current: NavKey; 
     if (!open) return;
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); btn.current?.focus(); } };
     const away = (e: Event) => { if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false); };
+    document.documentElement.classList.add('menu-open');          // the page behind the full-screen menu does not scroll
     document.addEventListener('keydown', key);
     document.addEventListener('pointerdown', away);
-    return () => { document.removeEventListener('keydown', key); document.removeEventListener('pointerdown', away); };
+    return () => { document.documentElement.classList.remove('menu-open'); document.removeEventListener('keydown', key); document.removeEventListener('pointerdown', away); };
   }, [open]);
 
   const cur = (k: NavKey) => (current === k ? 'true' : undefined);

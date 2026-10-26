@@ -122,6 +122,22 @@ Where this differs from the brief, and why:
 - **The verdict line reads "BK-001 for Seller · From → To"** so existing tests that look for that wording still pass.
 - `tests/theme.test.tsx` was rewritten for the single palette (the status-colour assertions are unchanged) and `tests/nav.test.tsx` lost its Light/Dark expectations; no other test changed.
 
+## Logistics-portal layout (restyle only)
+
+Layout and look only; no rule, engine, chat, upload, booking or API change, and every existing section keeps its content and order (Chat to book, Upload a file, Try an example, Rulebook, Carrier options, About, New booking in the header). Inspired by the structure of a freight company's home page; no logos, text, images or video were copied.
+
+- **Navbar:** a floating rounded pill that stays at the top, with a golden-yellow "New booking" button on the right. On phones the Menu button opens a full-screen menu (the page behind it does not scroll; Escape closes it).
+- **Hero:** full height, the big headline "Get Your Ship Together", the tagline, a "Start your shipment" card (pick Chat, Upload or Try an example, then Start) and the terminal panel that runs the real rule engine. Behind it, animated shipping route lines made in CSS and SVG (no video or image files), with a dark overlay; the animation stops for reduced motion.
+- **Stats strip:** 10 rules, 3 carriers, 3 destination countries, 4 UK collection cities, counted from the app's own data and counting up when scrolled into view.
+- **Sections:** "Two ways to book" cards (text from `content/about.ts`, plus Try an example) with Know more buttons; the booking tool under the heading "Book or check a shipment"; "What we check" icon cards (the 8 checks from `content/about.ts`); a four-icon features row; then Carrier options, Rulebook and About as before. Cards lift on hover and sections fade in on scroll; all content is visible without scripts or with reduced motion.
+- **Footer:** company name and tagline, quick links, the email and phone from the About content (mailto and tel links), scope and limits, and a yellow copyright bar. No social icons.
+- **Look:** still dark. Primary buttons, the active nav item and the focus ring are golden yellow (`#f6c744`) with dark text; buttons are pills, cards and the chat panel are rounded. Red, amber and green and the status tiles are unchanged. Yellow is close to the amber status colour, but statuses always carry a text label.
+- **Content for the new sections** is in `content/home.ts` (editable like the About content). `npm run check:placeholders` now scans it too.
+
+Skipped because the app has no equivalent and nothing should be invented: the news carousel, the app-download QR banner, the industries cards and the footer social icons.
+
+Proved by: `tests/home.test.tsx` (headline, hero card, stats counted from the engine, cards from the content files, section order, footer links, headings, full-screen menu rules, Reveal and CountUp with and without IntersectionObserver and with reduced motion), `tests/theme.test.tsx` (contrast of the new palette, locked status colours, shapes) and a browser check at 1360px and 375px (no sideways scroll, full-screen menu). Found while building: Next.js refuses to build a page that reads the clock during prerender, so the footer year is read in the browser.
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.

@@ -173,7 +173,7 @@ describe('layout rules in the stylesheet', () => {
   });
   it('respects the safe-area insets', () => {
     expect(css).toMatch(/\.topnav \{[^}]*env\(safe-area-inset-top/);
-    expect(css).toMatch(/\.nav \{[^}]*env\(safe-area-inset-left/);
+    expect(css).toMatch(/\.topnav \{[^}]*env\(safe-area-inset-left/);
   });
   it('under 700px the left links and New booking are hidden and Menu is shown', () => {
     const m = /@media \(max-width: 700px\) \{([\s\S]*?)\n\}/.exec(css);
