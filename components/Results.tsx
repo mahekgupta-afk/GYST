@@ -6,6 +6,7 @@ import { QuickFix, EditableSheet } from './FixEditor';
 import { fetchJson } from '@/lib/net';
 import ConfirmationPanel from './ConfirmationPanel';
 import PdfButton from './PdfButton';
+import { showResults } from '@/lib/scroll';
 import { HsCard, useHsResults, type HsMap } from './HsPanel';
 import { digitsOf, hsMessage } from '@/lib/hs';
 import type { HsResultLite } from '@/lib/reportData';
@@ -384,11 +385,11 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
       <>
         {banner}
         <div className="row-actions">
-          <button className="btn small ghost" onClick={() => setSel(null)}>Back to all bookings</button>
+          <button className="btn small ghost" onClick={() => { setSel(null); showResults(); }}>Back to all bookings</button>
           <span className="note">{'Booking ' + (idx + 1) + ' of ' + evs.length}</span>
           <span>
-            <button className="btn small ghost" disabled={idx === 0} onClick={() => setSel(uid(evs[idx - 1].b))}>Previous</button>{' '}
-            <button className="btn small ghost" disabled={idx === evs.length - 1} onClick={() => setSel(uid(evs[idx + 1].b))}>Next</button>
+            <button className="btn small ghost" disabled={idx === 0} onClick={() => { setSel(uid(evs[idx - 1].b)); showResults(); }}>Previous</button>{' '}
+            <button className="btn small ghost" disabled={idx === evs.length - 1} onClick={() => { setSel(uid(evs[idx + 1].b)); showResults(); }}>Next</button>
           </span>
         </div>
         <Detail b={cur.b} aiOn={aiOn} thumpKey={thumpKey}
@@ -438,7 +439,8 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
           <tbody>
             {shown.map(({ b, ev }: any) => {
               const r = ev.rec, c = r.recommended;
-              const go = () => { setSel(uid(b)); window.scrollTo({ top: 0 }); };
+              // Open the booking and bring its problems and fixes into view (not the top of the whole page).
+              const go = () => { setSel(uid(b)); showResults(); };
               return (
                 <tr key={uid(b)} className="click" tabIndex={0} role="link" aria-label={'Open ' + idLabel(b)} onClick={go} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }}>
                   <td><b className="mono">{idLabel(b)}</b>{b._ref ? <div className="note">{b._ref}</div> : null}</td><td>{b.seller || '—'}</td><td>{(b.originCity || '?') + ' to ' + (b.destCity || '?')}</td>

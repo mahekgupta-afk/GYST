@@ -6,6 +6,7 @@ import { applyChange, resetBooking, correctedRows, unacknowledged, issueKey, typ
 import { bookShipment } from '@/lib/bookingClient';
 import { fetchJson } from '@/lib/net';
 import { parseExample } from '@/lib/example';
+import { scrollToId } from '@/lib/scroll';
 import { readInvoice, INVOICE_MESSAGES } from '@/lib/invoiceClient';
 import Nav, { type NavKey } from './Nav';
 import About from './About';
@@ -440,19 +441,6 @@ export default function App() {
     greet(); setUpload(null); setSelState(null); setFilter('all'); setUploadMsg(''); setSaveNote(''); setInput(''); setPending(null);
     setMode('chat'); setFocusChat(n => n + 1); thump();
   }
-  const reduced = () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Smooth scroll to a section. If a long smooth scroll has not arrived after a moment (a busy page can interrupt it), jump there.
-  const scrollToId = (id: string) => {
-    const el = document.getElementById(id);
-    if (!el || !el.scrollIntoView) return;
-    el.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' });
-    if (reduced()) return;
-    window.setTimeout(() => {
-      const t = document.getElementById(id);
-      const navH = parseFloat(document.documentElement.style.getPropertyValue('--nav-h')) || 70;
-      if (t && Math.abs(t.getBoundingClientRect().top - (navH + 12)) > 40) t.scrollIntoView({ behavior: 'auto', block: 'start' });
-    }, 1100);
-  };
   function goTo(k: NavKey) {
     if (k === 'chat' || k === 'upload' || k === 'example') setSection('app');
     if (k === 'chat') { setMode('chat'); setFocusChat(n => n + 1); scrollToId('start'); }
