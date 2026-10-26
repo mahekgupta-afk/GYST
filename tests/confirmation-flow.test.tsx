@@ -8,6 +8,14 @@ import App from '../components/App';
 import { PF } from '../lib/pf';
 import { buildConfirmation } from '../lib/confirmation';
 
+// jsPDF's save() is created inside each document, so the library is wrapped: documents are real, but saving goes to a spy.
+const hooks = vi.hoisted(() => ({ save: (_n: string) => {} }));
+vi.mock('jspdf', async importOriginal => {
+  const real: any = await importOriginal();
+  const Wrapped = function (...a: any[]) { const d = new real.jsPDF(...a); d.save = (n: string) => hooks.save(n); return d; } as any;
+  return { ...real, jsPDF: Wrapped };
+});
+
 const json = (body: any, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
 const row = PF.BH.map((h: string) => ({ 'Booking ID': 'BK-001', 'Seller name': 'Northfield Goods', 'Origin city': 'Manchester', 'Origin country': 'United Kingdom', 'Destination city': 'Frankfurt', 'Destination country': 'Germany', 'Destination type': 'Business address',
   'Ready to ship date': '05-11-2030', 'Seller priority': 'Cheapest', Pallets: 3, Cartons: 90, 'Total declared value': 5400, Currency: 'GBP', 'Total gross weight (kg)': 620, 'Delivery appointment booked': 'Yes' } as any)[h]);
@@ -62,5 +70,43 @@ describe('booking in the app', () => {
     expect(screen.getByText(/could not be saved to the booking log, so it has no link/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Copy link/ })).toBeNull();
     expect(document.body.textContent).not.toContain('SHOULDNOTSHOW');
+  });
+
+  it('right after booking, takes you to the confirmation and focuses its reference', async () => {
+    await open(body => json({ ok: true, saved: true, reference: 'GYST-20261026-ABC123', accessKey: 'SECRETKEYSECRETKEYSECRET1', confirmation: buildConfirmation(body.booking, PF.evaluate(body.booking), { reference: 'GYST-20261026-ABC123', bookedAt: '2026-10-26T10:00:00Z' }) }));
+    const spy = Element.prototype.scrollIntoView as any;                        // the spy `open` installed
+    await screen.findByText('Booked. Reference GYST-20261026-ABC123');
+    await waitFor(() => expect(spy.mock.contexts.some((c: any) => c.id === 'booking-confirmation')).toBe(true));
+    await waitFor(() => expect(document.activeElement?.id).toBe('conf-GYST-20261026-ABC123'));
+  });
+  it('the confirmation is the first thing under the verdict, outside the locked part of the page', async () => {
+    await open(() => json({ ok: true, saved: true, reference: 'GYST-20261026-ABC123', accessKey: 'SECRETKEYSECRETKEYSECRET1' }));
+    await screen.findByText('Booked. Reference GYST-20261026-ABC123');
+    const panel = document.getElementById('booking-confirmation')!;
+    expect(panel.closest('fieldset')).toBeNull();
+    expect(panel.previousElementSibling!.classList.contains('verdict')).toBe(true);
+    expect(document.querySelector('fieldset.lock')!.hasAttribute('disabled')).toBe(true);        // the rest is still locked
+  });
+  it('after booking, the confirmation PDF button is switched on and downloads the PDF', async () => {
+    const save = vi.fn(); hooks.save = save;
+    await open(() => json({ ok: true, saved: true, reference: 'GYST-20261026-ABC123', accessKey: 'SECRETKEYSECRETKEYSECRET1' }));
+    await screen.findByText('Booked. Reference GYST-20261026-ABC123');
+    const btn = screen.getByRole('button', { name: 'Download booking confirmation (PDF)' }) as HTMLButtonElement;
+    expect(btn.matches(':disabled')).toBe(false);                                                // a disabled fieldset would switch this off
+    fireEvent.click(btn);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save.mock.calls[0][0]).toBe('gyst-booking-confirmation-GYST-20261026-ABC123.pdf');
+  });
+  it('the check report button and the copy-link button work after booking too, and there is a link to the confirmation on its own page', async () => {
+    const save = vi.fn(); hooks.save = save;
+    await open(() => json({ ok: true, saved: true, reference: 'GYST-20261026-ABC123', accessKey: 'SECRETKEYSECRETKEYSECRET1' }));
+    await screen.findByText('Booked. Reference GYST-20261026-ABC123');
+    for (const name of ['Download check report (PDF)', /Copy link to this confirmation/]) expect((screen.getByRole('button', { name }) as HTMLButtonElement).matches(':disabled')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Download check report (PDF)' }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const link = screen.getByRole('link', { name: 'Open this confirmation on its own page' }) as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toMatch(/\/booking\/GYST-20261026-ABC123\?k=SECRETKEYSECRETKEYSECRET1$/);
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
   });
 });

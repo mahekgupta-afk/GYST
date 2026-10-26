@@ -318,7 +318,15 @@ export default function App() {
   }
   const chooseInvoice = (f: File | undefined | null) => { if (f) setPending(f); };
 
-  /** Records a booking through the server, which re-checks the rulebook and refuses red bookings. */
+  /** Right after a booking, takes the seller to the confirmation: the reference, carrier, price, status and the PDF buttons. */
+  function toConfirmation(reference: string) {
+    window.setTimeout(() => {
+      scrollToId('booking-confirmation');
+      const head = document.getElementById('conf-' + reference);
+      if (head) head.focus({ preventScroll: true });
+    }, 60);
+  }
+
   /**
    * Records a booking through the server, which re-checks the rulebook and refuses red bookings.
    * One request at a time per booking (a second click while it is in flight does nothing), a 15 s limit,
@@ -332,6 +340,7 @@ export default function App() {
     try {
       const r = await bookShipment(b, source, fileName);
       if (r.ok) { b._confirmed = true; b._ref = r.reference; b._saved = r.saved; b._confirmation = r.confirmation || null; b._accessKey = r.accessKey || null; delete b._bookError; }
+      if (r.ok) toConfirmation(r.reference);
       else b._bookError = r.message;
       return r;
     } finally {
@@ -343,7 +352,7 @@ export default function App() {
   async function bookChat() {
     const b = chat.current.b;
     const r = await bookOne(b, 'chat');
-    say('bot', r.ok ? 'Booked with ' + PF.evaluate(b).rec.selected.carrier + '. Reference ' + r.reference + '. The “what happens next” steps are on the right.' : r.message,
+    say('bot', r.ok ? 'Booked with ' + PF.evaluate(b).rec.selected.carrier + '. Reference ' + r.reference + '. Your booking confirmation, with the PDF download, is on the right.' : r.message,
       r.ok ? ['Start a new booking'] : completeChips(PF.evaluate(b)));
   }
   const fixChat = (spec: Spec) => {

@@ -164,7 +164,7 @@ describe('mobile menu', () => {
 describe('layout rules in the stylesheet', () => {
   it('the header is sticky and every scroll target leaves room for it', () => {
     expect(css).toMatch(/\.topnav \{[^}]*position: sticky;[^}]*top: 0/);
-    const m = /#start, #carriers, #rulebook, #about \{([^}]*)\}/.exec(css);
+    const m = /#start, #carriers, #rulebook, #about, #booking-confirmation \{([^}]*)\}/.exec(css);
     expect(m, 'scroll-margin rule').toBeTruthy();
     expect(m![1]).toMatch(/scroll-margin-top: calc\(var\(--nav-h, \d+px\) \+ \d+px\)/);
   });

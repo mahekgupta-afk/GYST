@@ -158,7 +158,7 @@ function Confirmation({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
       {s.lines.map((l: string, i: number) => <p key={i}>{l}</p>)}
       <p className="muted" style={{ marginTop: 10 }}><b>What happens next</b></p>
       <ol>{s.next.map((n: string, i: number) => <li key={i}>{n}</li>)}</ol>
-      {booked ? <BookedSummary b={b} ev={ev} /> : (
+      {booked ? null : (
         <>
           {ev.status !== 'blocked' && ambers.length ? (
             <div className="acks">
@@ -303,9 +303,13 @@ function DetailBody({ b, opts, thumpKey, aiOn }: DetailProps) {
   // HS codes are checked against the UK Tariff on their own (advisory). The example never sends anything, so there it waits to be asked.
   const [hsOn, setHsOn] = useState(!opts.example);
   const hs = useHsResults(b.items || [], hsOn);
+  // The verdict (with the report button) and the booking confirmation sit OUTSIDE the locked part: a disabled fieldset
+  // disables every button inside it, which would switch off the PDF downloads and the copy-link button after booking.
   return (
-    <fieldset className="lock" disabled={locked}>
+    <div className="detailstack">
       <Verdict b={b} ev={ev} thumpKey={thumpKey} hs={hsOn ? hsForReport(b, hs) : []} />
+      {locked ? <BookedSummary b={b} ev={ev} /> : null}
+    <fieldset className="lock" disabled={locked}>
       <FixProgress b={b} ev={ev} opts={opts} />
       <Issues b={b} ev={ev} opts={opts} />
       <HsCard b={b} hs={hs} enabled={hsOn} onEnable={() => setHsOn(true)} locked={locked} onPick={(i, code) => { opts.fix({ kind: 'set', field: 'hs', value: code, itemIndex: i, rule: 'R-01' }); }} />
@@ -315,6 +319,7 @@ function DetailBody({ b, opts, thumpKey, aiOn }: DetailProps) {
       <ChangeLog b={b} />
       {aiOn ? <Advisory b={b} /> : null}
     </fieldset>
+    </div>
   );
 }
 

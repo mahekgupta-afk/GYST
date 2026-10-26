@@ -84,7 +84,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
   .nav-today { display: none; }
   .navright { gap: 8px; }
 }
-#start, #carriers, #rulebook, #about { scroll-margin-top: calc(var(--nav-h, 64px) + 12px); }
+#start, #carriers, #rulebook, #about, #booking-confirmation { scroll-margin-top: calc(var(--nav-h, 64px) + 12px); }
 
 /* ---- carrier options ---- */
 .co { margin-top: 24px; }
@@ -462,6 +462,8 @@ tr.pick td { background: rgba(246, 199, 68, 0.08); }
 
 /* ---- booking confirmation ---- */
 .confirmation { display: grid; gap: 16px; }
+.detailstack { display: grid; gap: 16px; min-width: 0; }
+.detailstack > * { min-width: 0; }
 .simbanner { display: grid; gap: 4px; border: 1px solid var(--brand); border-left-width: 5px; border-radius: 12px; background: var(--accent-glow); padding: 12px 16px; font-size: 14px; }
 .simbanner b { font-size: 15px; }
 .simbanner span { color: var(--ink-2); }

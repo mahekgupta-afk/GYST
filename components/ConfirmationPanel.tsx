@@ -27,13 +27,13 @@ function CopyLink({ link }: { link: string }) {
 export default function ConfirmationPanel({ c, link }: { c: Confirmation; link?: string | null }) {
   const s = c.shipment;
   return (
-    <section className="confirmation" aria-labelledby={'conf-' + c.reference}>
+    <section className="confirmation" id="booking-confirmation" aria-labelledby={'conf-' + c.reference}>
       <div className="simbanner" role="note">
         <b>{c.notice}</b>
         <span>{SIMULATED_DETAIL}</span>
       </div>
       <div className="confirmed" role="status">
-        <b id={'conf-' + c.reference}>{'Booked. Reference ' + c.reference}</b>
+        <b id={'conf-' + c.reference} tabIndex={-1}>{'Booked. Reference ' + c.reference}</b>
         <span className="note"> {'Recorded ' + nice(c.bookedAt.slice(0, 10))}</span>
       </div>
 
@@ -92,6 +92,7 @@ export default function ConfirmationPanel({ c, link }: { c: Confirmation; link?:
       <div className="row-actions" style={{ justifyContent: 'flex-start' }}>
         <PdfButton small={false} label="Download booking confirmation (PDF)" run={async () => { const m = await import('@/lib/pdf/confirmation'); m.downloadConfirmation(c); }} />
         {link ? <CopyLink link={link} /> : null}
+        {link ? <a className="btn small ghost" href={link} target="_blank" rel="noopener">Open this confirmation on its own page</a> : null}
       </div>
       {link ? <p className="note">{'Anyone with this link can open the confirmation, so share it carefully: '}<span className="mono confirm-link">{link}</span></p> : null}
     </section>
