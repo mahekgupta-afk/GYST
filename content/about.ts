@@ -70,7 +70,9 @@ export const about: AboutContent = {
       "Shipments from the UK to Germany, France and the Netherlands",
       "Prices in GBP only",
       "Delivery dates are estimates based on calendar days in transit",
-      "Bookings are recorded under a reference but are not yet transmitted to a carrier",
+      "Booking confirmations are simulated: a booking is recorded under a reference and you get a confirmation and PDF, but nothing is sent to a carrier yet, and the steps after \u201cBooked\u201d are estimates",
+      "The ten rules are fixed and run in your browser; fixes are previewed and only applied when you confirm",
+      "HS codes are also checked against the UK Trade Tariff as guidance only; the rules decide, and the lookup never blocks a booking",
     ],
   },
 

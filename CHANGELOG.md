@@ -164,6 +164,18 @@ Reopening: `/booking/[reference]?k=KEY` loads it through `GET /api/bookings/[ref
 
 Proved by: `tests/confirmation.test.tsx` (the data, the timeline, no invented carrier reference, the PDF text, the panel, the reopen page), `tests/confirmation-routes.test.ts` (saving, retries, 404s that look the same, no database) and `tests/confirmation-flow.test.tsx` (booking in the app).
 
+## HS code lookup and verification (advisory)
+
+A new advisory layer on top of R-01, which is exactly as before (at least 6 digits, Red if broken). It uses the UK Trade Tariff's public API (checked against the live service: `GET /api/v2/headings/{4 digits}` returns the heading's description and every commodity code under it with a declarable flag, and `GET /api/v2/search?q=` returns suggestions). The browser never calls the tariff: it calls our `/api/hs` (`app/api/hs/route.ts`, `lib/server/tariff.ts`), which asks the tariff with a 5 second timeout, caches headings for 24 hours and searches for 1 hour, never throws, and only ever sends the code or the search words (no booking or seller data). If the tariff is down or slow the answer is "could not verify" and nothing else changes.
+
+States per item: **Verified** (a full declarable code, with the official wording built from the heading down to the commodity), **6 digits only** (real, but a full 8 to 10 digit code is usually needed on a customs declaration; the full codes under it are offered), **Not a full code** (7 to 9 digits, or a code that is not declarable), **Not found**, **Could not verify**, and **Too short to check**. The "HS code check (advisory)" card in each booking shows the state, the official description, the message and suggestions, and a soft warning (never a rule failure) when the item's description has nothing in common with the official wording. "Find a code" lets the user type a description, pick a suggestion (a heading expands into its full codes) and fills the HS code field only when they pick one; it also sits under the R-01 fix. In the chat, when it asks for an HS code it offers up to three codes from the tariff as buttons (picking one answers the question; typing your own still works). Official wording is shown beside the code in the chat summary, and the verification results go into the check report PDF. In "Try an example" nothing is sent until you press "Check these codes against the UK tariff".
+
+Proved by: `tests/hs.test.ts` (real tariff responses saved as fixtures: every state, a heading that is itself the commodity such as 8206, caching, the tariff down or slow or odd, search and its retry, the route, R-01 unchanged) and `tests/hs-ui.test.tsx` (the card, Find a code, chat suggestions, failure handling, the report data), plus a run against the live tariff.
+
+## About page
+
+"Scope and limits" now says what is real and what is simulated: confirmations and their PDFs are simulated and nothing is sent to a carrier, the ten rules are fixed and run in the browser with fixes previewed first, and the HS lookup is guidance only.
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.

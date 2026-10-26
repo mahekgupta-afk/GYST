@@ -6,7 +6,7 @@ import { buildBookingReport, buildFileReport, REPORT_FOOTER, type BookingReport,
 
 const stamp = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 const HS_TEXT: Record<HsResultLite['state'], string> = {
-  verified: 'Verified', 'six-digits': '6 digits only', 'not-found': 'Not found in tariff', unavailable: 'Could not verify', blank: 'No code',
+  verified: 'Verified', 'six-digits': '6 digits only', partial: 'Not a full code', short: 'Too short to check', 'not-found': 'Not found in tariff', unavailable: 'Could not verify', blank: 'No code',
 };
 
 function bookingSection(p: Page, r: BookingReport, now: Date) {

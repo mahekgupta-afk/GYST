@@ -440,6 +440,23 @@ tr.pick td { background: rgba(246, 199, 68, 0.08); }
 .app-tool { padding-top: 40px; scroll-margin-top: calc(var(--nav-h, 70px) + 8px); }
 .app-tail { padding-top: 56px; }
 
+/* ---- HS code check ---- */
+.hsitems { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.hsitem { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); padding: 14px 16px; display: grid; gap: 8px; }
+.hshead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.hsofficial { margin: 0; font-size: 14px; }
+.hsoff { margin: 0; font-size: 13.5px; color: var(--amber); }
+.hsdesc { max-width: 28ch; }
+.hsfinder { border: 1px solid var(--border-active); border-radius: 12px; background: var(--surface); padding: 12px 14px; display: grid; gap: 10px; }
+.hslist, .hschildren { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.hschildren { margin-top: 8px; padding-left: 12px; border-left: 2px solid var(--border-active); }
+.hsrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.hscode { font-weight: 600; color: var(--brand); }
+.hstitle { flex: 1 1 220px; font-size: 14px; color: var(--ink-2); }
+.hsfix { display: grid; gap: 8px; }
+.hssuggest { display: grid; gap: 6px; margin-top: 8px; }
+.hssuggest .chip { text-align: left; max-width: 100%; }
+
 /* ---- booking confirmation ---- */
 .confirmation { display: grid; gap: 16px; }
 .simbanner { display: grid; gap: 4px; border: 1px solid var(--brand); border-left-width: 5px; border-radius: 12px; background: var(--accent-glow); padding: 12px 16px; font-size: 14px; }

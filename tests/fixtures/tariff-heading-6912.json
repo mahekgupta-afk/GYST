@@ -1,0 +1,276 @@
+{
+ "data": {
+  "type": "heading",
+  "attributes": {
+   "goods_nomenclature_item_id": "6912000000",
+   "description": "Ceramic tableware, kitchenware, other household articles and toilet articles, other than of porcelain or china",
+   "description_plain": "Ceramic tableware, kitchenware, other household articles and toilet articles, other than of porcelain or china"
+  }
+ },
+ "included": [
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002100",
+    "description": "Tableware and kitchenware",
+    "description_plain": "Tableware and kitchenware",
+    "number_indents": 1,
+    "leaf": false,
+    "producline_suffix": "10"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002100",
+    "description": "Of common pottery",
+    "description_plain": "Of common pottery",
+    "number_indents": 2,
+    "leaf": false,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002111",
+    "description": "Hand-made",
+    "description_plain": "Hand-made",
+    "number_indents": 3,
+    "leaf": false,
+    "producline_suffix": "10"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002111",
+    "description": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "description_plain": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "number_indents": 4,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002119",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 4,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002191",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 3,
+    "leaf": false,
+    "producline_suffix": "10"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002191",
+    "description": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "description_plain": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "number_indents": 4,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002199",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 4,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002300",
+    "description": "Stoneware",
+    "description_plain": "Stoneware",
+    "number_indents": 2,
+    "leaf": false,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002310",
+    "description": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "description_plain": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "number_indents": 3,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002390",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 3,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002500",
+    "description": "Earthenware or fine pottery",
+    "description_plain": "Earthenware or fine pottery",
+    "number_indents": 2,
+    "leaf": false,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002510",
+    "description": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "description_plain": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "number_indents": 3,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002590",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 3,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002900",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 2,
+    "leaf": false,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002910",
+    "description": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "description_plain": "Tableware and kitchenware, excluding condiment or spice mills and their ceramic grinding parts, coffee mills, knife sharpeners, sharpeners, kitchen tools to be used for cutting, grinding, grating, slicing, scraping and peeling, cordierite ceramic pizza-stones of a kind used for baking pizza or bread",
+    "number_indents": 3,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912002990",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 3,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912008100",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 1,
+    "leaf": false,
+    "producline_suffix": "10"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912008100",
+    "description": "Of common pottery",
+    "description_plain": "Of common pottery",
+    "number_indents": 2,
+    "leaf": false,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912008110",
+    "description": "Hand-made",
+    "description_plain": "Hand-made",
+    "number_indents": 3,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912008190",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 3,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912008300",
+    "description": "Stoneware",
+    "description_plain": "Stoneware",
+    "number_indents": 2,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912008500",
+    "description": "Earthenware or fine pottery",
+    "description_plain": "Earthenware or fine pottery",
+    "number_indents": 2,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  },
+  {
+   "type": "commodity",
+   "attributes": {
+    "goods_nomenclature_item_id": "6912008900",
+    "description": "Other",
+    "description_plain": "Other",
+    "number_indents": 2,
+    "leaf": true,
+    "producline_suffix": "80"
+   }
+  }
+ ]
+}

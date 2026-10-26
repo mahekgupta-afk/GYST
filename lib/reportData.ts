@@ -2,7 +2,8 @@
 import { PF } from './pf';
 import type { Change } from './fixes';
 
-export type HsResultLite = { item: string; code: string; state: 'verified' | 'six-digits' | 'not-found' | 'unavailable' | 'blank'; description?: string | null; note?: string };
+import type { HsState } from './hs';
+export type HsResultLite = { item: string; code: string; state: HsState; description?: string | null; note?: string };
 
 export type RuleRow = { id: string; text: string; sev: 'red' | 'amber'; result: 'Pass' | 'Amber' | 'Red' | 'Not checked'; problems: { title: string; what: string; fix: string; item: string | null }[] };
 export type CarrierRowData = { carrier: string; service: string; pricePerPallet: number; total: number | null; transit: number; ontime: number; maxKg: number; fits: boolean | null; note: string; recommended: boolean };

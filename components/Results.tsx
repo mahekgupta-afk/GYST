@@ -6,6 +6,9 @@ import { QuickFix, EditableSheet } from './FixEditor';
 import { fetchJson } from '@/lib/net';
 import ConfirmationPanel from './ConfirmationPanel';
 import PdfButton from './PdfButton';
+import { HsCard, useHsResults, type HsMap } from './HsPanel';
+import { digitsOf, hsMessage } from '@/lib/hs';
+import type { HsResultLite } from '@/lib/reportData';
 import { buildConfirmation, type Confirmation as ConfirmationData } from '@/lib/confirmation';
 
 export const plural = (n: number, w: string, p?: string) => n + ' ' + (n === 1 ? w : p || w + 's');
@@ -29,7 +32,7 @@ function RuleStrip({ ev }: { ev: any }) {
   );
 }
 
-function Verdict({ b, ev }: { b: any; ev: any; thumpKey?: number }) {
+function Verdict({ b, ev, hs }: { b: any; ev: any; thumpKey?: number; hs?: HsResultLite[] }) {
   const { status, counts } = ev;
   const cfg = ({
     blocked: { label: 'BLOCKED', sub: counts.red + ' issue' + (counts.red !== 1 ? 's' : '') + ' must be fixed before this ships', cls: 'red' },
@@ -42,7 +45,7 @@ function Verdict({ b, ev }: { b: any; ev: any; thumpKey?: number }) {
         <span className="verdict-dot" aria-hidden="true" />
         <span className="verdict-label">{cfg.label}</span>
         <span className="verdict-sub">{cfg.sub}</span>
-        <span className="verdict-actions"><PdfButton label="Download check report (PDF)" run={async () => { const m = await import('@/lib/pdf/report'); m.downloadBookingReport(b, ev); }} /></span>
+        <span className="verdict-actions"><PdfButton label="Download check report (PDF)" run={async () => { const m = await import('@/lib/pdf/report'); m.downloadBookingReport(b, ev, hs || []); }} /></span>
       </div>
       <p className="sub">{idLabel(b) + ' for ' + (b.seller || 'unnamed seller') + ' · ' + (b.originCity || '?') + ' → ' + (b.destCity || b.destCountry || '?')}</p>
       <RuleStrip ev={ev} />
@@ -224,7 +227,7 @@ function ChangeLog({ b }: { b: any }) {
   );
 }
 
-export function SheetCard({ b, title, showProgress }: { b: any; title: string; showProgress?: boolean }) {
+export function SheetCard({ b, title, showProgress, hs }: { b: any; title: string; showProgress?: boolean; hs?: HsMap }) {
   const f = C.sheetFields(b), done = f.filter((x: any) => x.value !== null).length;
   const itemsOk = b.items.length > 0 && b.items.every((it: any) => it.desc && it.qty != null && it.price != null && it.upc != null && it.cartons != null && it.unitWeight != null && (it.hs != null || it.skipHS) && (it.coo || it.skipCOO));
   const total = f.length + 1, d = done + (itemsOk ? 1 : 0);
@@ -242,7 +245,7 @@ export function SheetCard({ b, title, showProgress }: { b: any; title: string; s
                 <td>{i.desc || '—'}<div className="note">{'SKU ' + (i.sku || '—')}</div></td>
                 <td className="num">{i.qty != null ? i.qty.toLocaleString('en-GB') : '—'}</td><td className="num">{i.price != null ? PF.gbp(i.price) : '—'}</td>
                 <td className="num">{i.upc != null ? i.upc : '—'}</td><td className="num">{i.cartons != null ? i.cartons : '—'}</td><td className="num">{i.unitWeight != null ? i.unitWeight : '—'}</td>
-                <td>{i.hs != null && i.hs !== '' ? String(i.hs) : (i.skipHS ? 'blank' : '—')}</td><td>{i.coo || (i.skipCOO ? 'blank' : '—')}</td>
+                <td>{i.hs != null && i.hs !== '' ? String(i.hs) : (i.skipHS ? 'blank' : '—')}{(() => { const r = hs && hs[digitsOf(i.hs)]; return r && r !== 'loading' && r.state === 'verified' && r.description ? <div className="note hsdesc">{r.description}</div> : null; })()}</td><td>{i.coo || (i.skipCOO ? 'blank' : '—')}</td>
               </tr>))}</tbody>
           </table>
         </div>
@@ -280,14 +283,31 @@ function Advisory({ b }: { b: any }) {
   );
 }
 
-export function Detail({ b, opts, thumpKey, aiOn }: { b: any; opts: Opts; thumpKey: number; aiOn: boolean }) {
+/** The HS results in the shape the report uses: one line per item. */
+export function hsForReport(b: any, hs: HsMap): HsResultLite[] {
+  return (b.items || []).map((it: any) => {
+    const code = digitsOf(it.hs), r = hs[code];
+    const done = r && r !== 'loading' ? r : null;
+    return { item: it.sku || it.desc || 'item', code, state: !code ? 'blank' : done ? done.state : 'unavailable', description: done ? done.description : null, note: done ? hsMessage(done) : 'Not checked.' };
+  });
+}
+
+type DetailProps = { b: any; opts: Opts; thumpKey: number; aiOn: boolean };
+// Detail itself uses no hooks (it can be called as a plain function); the part that does is its own component.
+export function Detail(props: DetailProps) { return <DetailBody {...props} />; }
+
+function DetailBody({ b, opts, thumpKey, aiOn }: DetailProps) {
   const ev = PF.evaluate(b);
   const locked = !!b._ref; // a booked shipment is final: its fields can't be edited any more
+  // HS codes are checked against the UK Tariff on their own (advisory). The example never sends anything, so there it waits to be asked.
+  const [hsOn, setHsOn] = useState(!opts.example);
+  const hs = useHsResults(b.items || [], hsOn);
   return (
     <fieldset className="lock" disabled={locked}>
-      <Verdict b={b} ev={ev} thumpKey={thumpKey} />
+      <Verdict b={b} ev={ev} thumpKey={thumpKey} hs={hsOn ? hsForReport(b, hs) : []} />
       <FixProgress b={b} ev={ev} opts={opts} />
       <Issues b={b} ev={ev} opts={opts} />
+      <HsCard b={b} hs={hs} enabled={hsOn} onEnable={() => setHsOn(true)} locked={locked} onPick={(i, code) => { opts.fix({ kind: 'set', field: 'hs', value: code, itemIndex: i, rule: 'R-01' }); }} />
       <CarrierSection b={b} ev={ev} opts={opts} />
       <Confirmation b={b} ev={ev} opts={opts} />
       <EditableSheet b={b} ev={ev} fix={opts.fix} title="Booking details" />

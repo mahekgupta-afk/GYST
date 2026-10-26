@@ -11,9 +11,12 @@ import Nav, { type NavKey } from './Nav';
 import About from './About';
 import { Hero, StatsStrip, WaysSection, ChecksSection, FeaturesSection } from './Home';
 import Footer from './Footer';
+import { useHsResults } from './HsPanel';
+import { suggestHs, verifyHs } from '@/lib/hsClient';
+import { descriptionLooksOff, shortText } from '@/lib/hs';
 import CarrierOptions, { type UseDetails } from './CarrierOptions';
 
-type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
+type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean; suggest?: { code: string; label: string }[] };
 const sig = (c: any) => JSON.stringify(Object.assign({}, c.b, { _confirmed: undefined }));
 const GREETING = 'Let’s get your shipment sorted. Tell me what you’re sending, in your own words, and I’ll only ask about what’s missing.\nOnce I have it, I’ll check the paperwork before it leaves and recommend the right carrier.\nI cover collections from London, Manchester, Birmingham and Leeds to Germany, France and the Netherlands.';
 
@@ -183,6 +186,28 @@ export default function App() {
     return C.aiToEx(json.result, c0);
   }
 
+  /**
+   * When the chat is asking for an HS code, offers up to three suggestions from the UK Tariff as buttons. Advisory only:
+   * the seller picks one (or types their own), and the same rules and validation apply as for anything typed.
+   */
+  async function offerHs() {
+    const a = chat.current.asked;
+    if (!a || (a.key !== 'item.hs' && a.key !== 'item.details')) return;
+    const it = chat.current.b.items[a.itemIdx ?? chat.current.b.items.length - 1];
+    if (!it || !it.desc || (it.hs !== null && it.hs !== undefined && it.hs !== '')) return;
+    const at = msgsRef.current.length - 1, text = msgsRef.current[at]?.text;
+    const found = await suggestHs(it.desc);
+    const picks: { code: string; label: string }[] = [];
+    const add = (code: string, official: string) => { if (picks.length < 3 && /^\d{10}$/.test(code) && !picks.some(p => p.code === code)) picks.push({ code, label: code + ' · ' + shortText(official.split(' › ').pop() || official, 70) }); };
+    for (const sg of found.suggestions) {
+      if (picks.length >= 3) break;
+      if (sg.kind === 'commodity') add(sg.code, sg.title);
+      else { const r = await verifyHs(sg.code); r.children.filter(ch => !descriptionLooksOff(it.desc, ch.description)).slice(0, 2).forEach(ch => add(ch.code, ch.description)); }
+    }
+    if (!picks.length || msgsRef.current[at]?.text !== text) return;          // nothing to offer, or the conversation has moved on
+    setM(msgsRef.current.map((m, i) => (i === at ? { ...m, suggest: picks } : m)));
+  }
+
   async function send(textIn?: string, builtInOnly = false) {
     const text = (textIn !== undefined ? textIn : input).trim();
     if (!text || busy) return;
@@ -234,6 +259,7 @@ export default function App() {
     const reply = compose(log, snap);
     say('bot', reply.text, reply.chips);
     bump();
+    void offerHs();
     if (pendingBook.current) { pendingBook.current = false; void bookChat(); }
   }
 
@@ -271,6 +297,7 @@ export default function App() {
     const reply = compose(log, snap);
     say('bot', ['Here is what I read from your invoice. Please check it is right: the checks use it exactly as written, and you can tell me to change anything.', ...notes, reply.text].join('\n'), reply.chips);
     bump();
+    void offerHs();
   }
 
   /** Send: the attached invoice (if any) first, then any text typed with it. Nothing is sent until this is pressed. */
@@ -443,6 +470,7 @@ export default function App() {
   const navCurrent: NavKey = section !== 'app' ? section : mode === 'chat' ? 'chat' : upload && upload.example ? 'example' : 'upload';
 
   const c = chat.current, b = c.b;
+  const chatHs = useHsResults(b.items || [], true);                         // advisory: the official wording shown beside each code in the chat summary
   const lastIdx = msgs.length - 1;
 
   return (
@@ -467,6 +495,12 @@ export default function App() {
               {msgs.map((m, i) => (
                 <div key={i}>
                   <div className={'msg ' + m.role + (m.typing ? ' typing' : '')}>{m.text.split('\n').map((l, k) => <p key={k}>{l}</p>)}</div>
+                  {m.suggest && i === lastIdx && !busy ? (
+                    <div className="hssuggest" role="group" aria-label="Suggested HS codes">
+                      <span className="note">Suggested from the UK Tariff. Check one fits, or type your own:</span>
+                      <div className="chips">{m.suggest.map(sg => <button key={sg.code} type="button" className="chip" title={sg.label} onClick={() => send('HS ' + sg.code)}>{sg.label}</button>)}</div>
+                    </div>
+                  ) : null}
                   {m.chips && i === lastIdx && !busy ? <div className="chips">{m.chips.map(ch => <button key={ch} className="chip" onClick={() => send(ch)}>{ch}</button>)}</div> : null}
                 </div>
               ))}
@@ -522,7 +556,7 @@ export default function App() {
           {mode === 'chat' ? (
             !C.isComplete(c) ? (
               <>
-                <SheetCard b={b} title="Your booking so far" showProgress />
+                <SheetCard b={b} title="Your booking so far" showProgress hs={chatHs} />
                 <div className="card section"><h3>Pre-flight checks</h3><p className="muted">The ten rulebook checks and the carrier recommendation appear here as soon as the details are complete. Nothing is guessed: anything I’m unsure of, I’ll ask.</p></div>
               </>
             ) : (

@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { PF } from '@/lib/pf';
 import { suggestions, itemFlags, type Spec, type ApplyResult } from '@/lib/fixes';
 import { fixOptions, previewFix, money, type FixOption } from '@/lib/autofix';
+import { HsFinder } from './HsPanel';
 import { checkNumber, checkHs, checkReadyDate, inlineError, type FieldKey } from '@/lib/validate';
 
 type Fix = (s: Spec) => ApplyResult | void;
@@ -112,6 +113,7 @@ export function QuickFix({ issue, b, ev, fix }: { issue: any; b: any; ev: any; f
   const s = suggestions(b), rec = ev.rec, rule = issue.rule as string;
   const items: any[] = b.items || [];
   const [pend, setPend] = useState<FixOption | null>(null);
+  const [finder, setFinder] = useState<number | null>(null);
   const options = fixOptions(b, ev, issue);
   // Rows this issue is about. Item-level issues carry the SKU; fall back to rows with no SKU.
   const rows = (pred: (it: any) => boolean) => items.map((_, i) => i).filter(i => (issue.item ? items[i].sku === issue.item : !items[i].sku) && pred(items[i]));
@@ -120,8 +122,13 @@ export function QuickFix({ issue, b, ev, fix }: { issue: any; b: any; ev: any; f
 
   if (rule === 'R-01') {
     body = rows(it => itemFlags(it).hs).map(i => (
-      <TextField key={i} label={'HS code for ' + name(items[i])} hint="at least 6 digits" cta="Set HS code" error={hsError}
-        onApply={t => fix({ kind: 'set', field: 'hs', value: t.replace(/[\s.]/g, ''), itemIndex: i, rule })} />
+      <div key={i} className="hsfix">
+        <TextField label={'HS code for ' + name(items[i])} hint="at least 6 digits" cta="Set HS code" error={hsError}
+          onApply={t => fix({ kind: 'set', field: 'hs', value: t.replace(/[\s.]/g, ''), itemIndex: i, rule })} />
+        {finder === i
+          ? <HsFinder initial={items[i].desc || ''} onPick={c => { fix({ kind: 'set', field: 'hs', value: c, itemIndex: i, rule }); setFinder(null); }} onClose={() => setFinder(null)} />
+          : <button type="button" className="btn small ghost" onClick={() => setFinder(i)}>{'Find a code for ' + name(items[i])}</button>}
+      </div>
     ));
   } else if (rule === 'R-02') {
     body = <NumField field="declaredValue" label="Or enter the correct declared value (£)" cta="Set value" step="0.01" onApply={n => fix({ kind: 'set', field: 'declaredValue', value: n, rule })} />;

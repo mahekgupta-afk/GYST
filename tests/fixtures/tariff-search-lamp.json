@@ -1,0 +1,118 @@
+{
+ "data": {
+  "type": "fuzzy_search",
+  "attributes": {
+   "type": "fuzzy_match",
+   "reference_match": {
+    "headings": [
+     {
+      "_source": {
+       "title": "fluorescent lamps ",
+       "reference": {
+        "goods_nomenclature_item_id": "8539000000"
+       }
+      }
+     },
+     {
+      "_source": {
+       "title": "blow lamps",
+       "reference": {
+        "goods_nomenclature_item_id": "8205000000"
+       }
+      }
+     },
+     {
+      "_source": {
+       "title": "arc-lamp carbons",
+       "reference": {
+        "goods_nomenclature_item_id": "8545000000"
+       }
+      }
+     }
+    ],
+    "commodities": [
+     {
+      "_source": {
+       "title": "portable lamps",
+       "reference": {
+        "goods_nomenclature_item_id": "8513100000"
+       }
+      }
+     },
+     {
+      "_source": {
+       "title": "salt lamp",
+       "reference": {
+        "goods_nomenclature_item_id": "9405219090"
+       }
+      }
+     },
+     {
+      "_source": {
+       "title": "lamp bases",
+       "reference": {
+        "goods_nomenclature_item_id": "8539901000"
+       }
+      }
+     },
+     {
+      "_source": {
+       "title": "infra-red lamps",
+       "reference": {
+        "goods_nomenclature_item_id": "8539490000"
+       }
+      }
+     }
+    ]
+   },
+   "goods_nomenclature_match": {
+    "headings": [
+     {
+      "_source": {
+       "goods_nomenclature_item_id": "8545000000",
+       "description": "Carbon electrodes, carbon brushes, lamp carbons, battery carbons and other articles of graphite or other carbon, with or without metal, of a kind used for electrical purposes"
+      }
+     },
+     {
+      "_source": {
+       "goods_nomenclature_item_id": "8539000000",
+       "description": "Electric filament or discharge lamps, including sealed beam lamp units and ultraviolet or infra-red lamps; arc-lamps; light-emitting diode (led) light sources"
+      }
+     },
+     {
+      "_source": {
+       "goods_nomenclature_item_id": "8536000000",
+       "description": "Electrical apparatus for switching or protecting electrical circuits, or for making connections to or in electrical circuits (for example, switches, relays, fuses, surge suppressors, plugs, sockets, lamp holders and other connectors, junction boxes), for a voltage not exceeding 1 000 v; connectors for optical fibres, optical fibre bundles or cables"
+      }
+     }
+    ],
+    "commodities": [
+     {
+      "_source": {
+       "goods_nomenclature_item_id": "8539329000",
+       "description": "Metal halide lamps"
+      }
+     },
+     {
+      "_source": {
+       "goods_nomenclature_item_id": "8539221000",
+       "description": "Reflector lamps"
+      }
+     },
+     {
+      "_source": {
+       "goods_nomenclature_item_id": "8539221090",
+       "description": "Other"
+      }
+     },
+     {
+      "_source": {
+       "goods_nomenclature_item_id": "8539219210",
+       "description": "Lamps for lighting, for use in certain types of aircraft"
+      }
+     }
+    ]
+   }
+  }
+ }
+}

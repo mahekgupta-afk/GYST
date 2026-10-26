@@ -31,7 +31,7 @@ export default function Footer({ onGo }: { onGo: (k: NavKey) => void }) {
         </div>
         <div className="footer-col">
           <h2 className="footer-h">Scope and limits</h2>
-          <ul className="footer-fine">{about.scope.items.slice(1).map((t, i) => <li key={i}>{t}</li>)}</ul>
+          <ul className="footer-fine">{about.scope.items.slice(1, 4).map((t, i) => <li key={i}>{t}</li>)}</ul>
         </div>
       </div>
       <div className="footer-bar">© {year} Get Your Ship Together. Checks run in the browser using fixed rules.</div>

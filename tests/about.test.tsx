@@ -39,7 +39,10 @@ describe('About renders every item from the content file', () => {
     const { container } = render(<About />);
     expect(container.querySelectorAll('ol.about-steps > li')).toHaveLength(3);
     expect(about.whatWeCheck.items).toHaveLength(8);
-    expect(about.scope.items).toHaveLength(4);
+    expect(about.scope.items).toHaveLength(6);
+    expect(about.scope.items.join(' ')).toMatch(/simulated/i);
+    expect(about.scope.items.join(' ')).toMatch(/not.*sent to a carrier|nothing is sent to a carrier/i);
+    expect(about.scope.items.join(' ')).toMatch(/UK Trade Tariff/);
   });
   it('has no team or partners section', () => {
     const { container } = render(<About />);

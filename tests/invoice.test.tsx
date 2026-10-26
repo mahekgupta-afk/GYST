@@ -164,7 +164,7 @@ describe('in the chat', () => {
     render(<App />);
     await screen.findByLabelText('Attach an invoice'); attach(); send();
     await waitFor(() => expect(lastBot()).toContain('Here is what I read'));
-    expect(calls.filter(u => !u.includes('parse-message') && !u.includes('read-invoice'))).toEqual([]);
+    expect(calls.filter(u => !u.includes('parse-message') && !u.includes('read-invoice') && !u.includes('/api/hs'))).toEqual([]);          // the HS lookup sends only the code
   });
 
   describe('review before sending', () => {
