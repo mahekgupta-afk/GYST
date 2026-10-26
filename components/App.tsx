@@ -9,6 +9,7 @@ import { parseExample } from '@/lib/example';
 import { readInvoice, INVOICE_MESSAGES } from '@/lib/invoiceClient';
 import Nav, { type NavKey } from './Nav';
 import About from './About';
+import LandingTerminal from './LandingTerminal';
 import CarrierOptions, { type UseDetails } from './CarrierOptions';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean };
@@ -61,30 +62,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    setToday('Checking against today, ' + PF.niceDate(PF.todayISO()));
+    setToday(PF.niceDate(PF.todayISO()));
     greet();
     fetchJson('/api/parse-message').then(({ json }) => { if (json && json.enabled) { setAiOn(true); } }).catch(() => {});
   }, [greet]);
 
-  // The chat panel is sized to the space left under the header, so the message box is on screen when the page opens.
   // --nav-h is the sticky bar's height: scroll targets and the sticky chat panel leave that much room at the top.
+  // --chrome is what the chat panel gives up, so it fills the window under the bar when it is scrolled into view.
   useEffect(() => {
     const set = () => {
-      const nav = document.querySelector('.topnav') as HTMLElement | null, hero = document.querySelector('.hero') as HTMLElement | null;
-      if (!nav || !hero) return;
+      const nav = document.querySelector('.topnav') as HTMLElement | null;
+      if (!nav) return;
       const nh = Math.ceil(nav.getBoundingClientRect().height);
       document.documentElement.style.setProperty('--nav-h', nh + 'px');
-      document.documentElement.style.setProperty('--chrome', nh + Math.ceil(hero.getBoundingClientRect().height) + 58 + 'px');
+      document.documentElement.style.setProperty('--chrome', nh + 32 + 'px');
     };
     set();
-    const raf = requestAnimationFrame(() => requestAnimationFrame(set));
     const late = window.setTimeout(set, 400);
     window.addEventListener('load', set);
     window.addEventListener('resize', set);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(set).catch(() => {});
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(set);
-    if (ro) document.querySelectorAll('.topnav, .hero').forEach(el => ro.observe(el));
-    return () => { cancelAnimationFrame(raf); clearTimeout(late); window.removeEventListener('load', set); window.removeEventListener('resize', set); if (ro) ro.disconnect(); };
+    if (ro) document.querySelectorAll('.topnav').forEach(el => ro.observe(el));
+    return () => { clearTimeout(late); window.removeEventListener('load', set); window.removeEventListener('resize', set); if (ro) ro.disconnect(); };
   }, []);
   // Which part of the page is in view, for the header's active state.
   useEffect(() => {
@@ -434,18 +434,23 @@ export default function App() {
   const lastIdx = msgs.length - 1;
 
   return (
-    <div className="frame">
-      <i className="plus tl" aria-hidden="true" /><i className="plus tr" aria-hidden="true" /><i className="plus bl" aria-hidden="true" /><i className="plus br" aria-hidden="true" />
-      <Nav current={navCurrent} onGo={goTo} onNew={newBooking} />
-      <header className="hero">
-        <div className="hero-copy">
-          <span className="eyebrow">Booking and pre-flight checks</span>
-          <h1 className="brand">Get Your Ship Together</h1>
-          <p className="tag">Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against the rulebook before it leaves.</p>
-          <div className="today">{today}</div>
+    <>
+      <Nav current={navCurrent} onGo={goTo} onNew={newBooking} today={today} />
+
+      <section className="landing" aria-labelledby="landing-h">
+        <div className="landing-inner">
+          <div className="landing-copy">
+            <div className="landing-eyebrow">UK–EU Freight &nbsp;·&nbsp; Pre-flight Compliance</div>
+            <h1 className="landing-h1" id="landing-h">Catch paperwork errors<br />before customs does.</h1>
+            <p className="landing-sub">Ten deterministic rules. Three carriers. Carrier recommendation based on your priority. Zero surprises at the border.</p>
+            <div className="landing-ctas">
+              <button type="button" className="btn landing-cta-primary" onClick={() => goTo('chat')}>Start booking →</button>
+              <button type="button" className="btn ghost landing-cta-secondary" onClick={() => goTo('upload')}>Upload your sheets</button>
+            </div>
+          </div>
+          <LandingTerminal />
         </div>
-        <i className="plus l" aria-hidden="true" /><i className="plus r" aria-hidden="true" />
-      </header>
+      </section>
 
       <div className="app">
 
@@ -555,6 +560,6 @@ export default function App() {
 
       <About />
       </div>
-    </div>
+    </>
   );
 }

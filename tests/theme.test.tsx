@@ -1,19 +1,21 @@
-// @vitest-environment jsdom
-// Light and dark themes: contrast of every text/background pair in the real stylesheet, and the switch itself.
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import ThemeToggle from '../components/ThemeToggle';
-import { applyTheme, readTheme, effectiveTheme, themeInitScript, THEME_KEY } from '../lib/theme';
+// The one dark palette ("freight terminal"): contrast of every text/background pair in the real stylesheet, the locked status colours,
+// and the checks that the old light mode, theme switch and decorative frame are gone.
+import { describe, it, expect } from 'vitest';
+import { readFileSync, existsSync } from 'node:fs';
 
 const css = readFileSync('app/globals.css', 'utf8');
-const block = (start: string) => { const i = css.indexOf(start); const j = css.indexOf('}', i); return css.slice(i, j); };
-const tokens = (b: string) => Object.fromEntries([...b.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\b/g)].map(m => [m[1], m[2]]));
+const layout = readFileSync('app/layout.tsx', 'utf8');
+const block = (start: string) => { const i = css.indexOf(start); const j = css.indexOf('\n}', i); return css.slice(i, j); };
 
-const light = tokens(block(':root {'));
-const darkMedia = tokens(block(':root:not([data-theme="light"]) {'));
-const darkAttr = tokens(block(':root[data-theme="dark"] {'));
+// Read every custom property in :root, following var(--other) references, so tokens defined as aliases resolve to a colour.
+const raw = Object.fromEntries([...block(':root {').matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]));
+const resolve = (name: string, depth = 0): string => {
+  const v = raw[name];
+  if (v === undefined || depth > 6) throw new Error('unknown token ' + name);
+  const ref = /^var\(--([a-z0-9-]+)\)$/.exec(v);
+  return ref ? resolve(ref[1], depth + 1) : v;
+};
+const t = new Proxy({} as Record<string, string>, { get: (_o, k: string) => { try { return resolve(k); } catch { return undefined as any; } } });
 
 const lum = (h: string) => { const c = h.replace('#', ''); const [r, g, b] = [0, 2, 4].map(i => parseInt(c.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
@@ -26,10 +28,14 @@ const PAIRS: [string, string][] = [
   ['ink', 'red-bg'], ['ink', 'amber-bg'], ['ink', 'green-bg'],
 ];
 
-describe.each([['light', light], ['dark (system setting)', darkMedia], ['dark (chosen)', darkAttr]] as const)('%s theme', (_name, t) => {
-  it('defines every token', () => {
-    for (const k of ['ink', 'ink2', 'ink3', 'canvas', 'paper', 'paper2', 'line', 'frame', 'edge', 'mark', 'brand', 'brand-hover', 'brand-ink', 'brand-soft', 'link', 'ring',
-      'red', 'red-bg', 'amber', 'amber-bg', 'green', 'green-bg', 'tile-all', 'tile-red', 'tile-amber', 'tile-green', 'tile-booked']) expect(t[k], k).toMatch(/^#[0-9a-f]{6}$/i);
+describe('the dark palette', () => {
+  it('defines every token as a colour', () => {
+    for (const k of ['ink', 'ink2', 'ink3', 'canvas', 'paper', 'paper2', 'line', 'frame', 'edge', 'brand', 'brand-hover', 'brand-ink', 'brand-soft', 'link', 'ring',
+      'red', 'red-bg', 'amber', 'amber-bg', 'green', 'green-bg', 'tile-all', 'tile-red', 'tile-amber', 'tile-green', 'tile-booked', 'bg', 'surface', 'surface-2', 'border', 'border-active', 'accent']) expect(t[k], k).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+  it('uses the specified surfaces', () => {
+    expect(t.bg).toBe('#080c14'); expect(t.surface).toBe('#0f1929'); expect(t['surface-2']).toBe('#162236');
+    expect(t.border).toBe('#1e3048'); expect(t['border-active']).toBe('#2a4570'); expect(t.accent).toBe('#3b82f6'); expect(t.ink).toBe('#f0f4f8');
   });
   it.each(PAIRS)('%s on %s has at least 4.5:1 contrast (WCAG AA)', (fg, bg) => {
     expect(ratio(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
@@ -42,125 +48,59 @@ describe.each([['light', light], ['dark (system setting)', darkMedia], ['dark (c
   });
   it('control borders and the focus ring are visible against the cards and the page (3:1)', () => {
     for (const k of ['edge', 'ring']) { expect(ratio(t[k], t.paper), k + ' on paper').toBeGreaterThanOrEqual(3); expect(ratio(t[k], t.canvas), k + ' on canvas').toBeGreaterThanOrEqual(3); }
+    expect(ratio(t.edge, t.paper2)).toBeGreaterThanOrEqual(3);
   });
-  it('has a visible hairline against the page', () => {
-    expect(ratio(t.line, t.paper)).toBeGreaterThanOrEqual(1.1);
-    expect(ratio(t.frame, t.canvas)).toBeGreaterThanOrEqual(1.2);
+  it('has a visible hairline against the page and cards', () => {
+    expect(ratio(t.line, t.canvas)).toBeGreaterThanOrEqual(1.1);
+    expect(ratio(t.line, t.paper)).toBeGreaterThanOrEqual(1.05);
   });
 });
 
 // The status colours are part of the product's meaning, so a restyle must not move them.
-describe('red, amber and green are unchanged by the restyle', () => {
-  const LOCKED = {
-    light: { red: '#b3261e', 'red-bg': '#fdecea', amber: '#85500a', 'amber-bg': '#fff1cc', green: '#0d7440', 'green-bg': '#e1f5e9', 'tile-red': '#c0261c', 'tile-red-text': '#ffffff', 'tile-amber': '#f5b301', 'tile-amber-text': '#000000', 'tile-green': '#0e7c45', 'tile-green-text': '#ffffff' },
-    dark: { red: '#ff8f86', 'red-bg': '#3b181b', amber: '#f7bd55', 'amber-bg': '#3a2b0c', green: '#5fd69a', 'green-bg': '#0e3323', 'tile-red': '#ff8277', 'tile-red-text': '#000000', 'tile-amber': '#f7bd55', 'tile-amber-text': '#000000', 'tile-green': '#52d08e', 'tile-green-text': '#000000' },
-  };
-  it.each(Object.entries(LOCKED.light))('light %s', (k, v) => expect(light[k]).toBe(v));
-  it.each(Object.entries(LOCKED.dark))('dark %s (both dark blocks)', (k, v) => { expect(darkMedia[k]).toBe(v); expect(darkAttr[k]).toBe(v); });
+describe('red, amber and green are unchanged by the redesign', () => {
+  const LOCKED = { red: '#ff8f86', 'red-bg': '#3b181b', amber: '#f7bd55', 'amber-bg': '#3a2b0c', green: '#5fd69a', 'green-bg': '#0e3323',
+    'tile-red': '#ff8277', 'tile-red-text': '#000000', 'tile-amber': '#f7bd55', 'tile-amber-text': '#000000', 'tile-green': '#52d08e', 'tile-green-text': '#000000' };
+  it.each(Object.entries(LOCKED))('%s', (k, v) => expect(t[k]).toBe(v));
 });
 
-describe('the flat, hairline design rules', () => {
-  it('uses no gradients and no blurred glows: the page and header are flat', () => {
-    expect(css).not.toMatch(/(linear|radial|conic)-gradient\(/);
-    expect(css).not.toMatch(/backdrop-filter/);
+describe('dark only: no light mode, no theme switch', () => {
+  it('has a single palette: no prefers-color-scheme or data-theme blocks, and the browser is told it is dark', () => {
+    expect(css).not.toMatch(/prefers-color-scheme/);
+    expect(css).not.toMatch(/data-theme/);
+    expect(css).not.toMatch(/:root(\[|:not)/);
+    expect(css.match(/--canvas:/g)).toHaveLength(1);
+    expect(block(':root {')).toMatch(/\bcolor-scheme: dark;/);
   });
-  it('the main button is a near-black pill and the secondary is white with a hairline border', () => {
-    expect(light.brand.toLowerCase()).toBe('#141414');
-    expect(css).toMatch(/\.btn \{[^}]*border-radius: 100px/);
-    expect(css).toMatch(/\.btn\.ghost \{[^}]*background: var\(--paper\)/);
-  });
-  it('the framed canvas and its corner plus-marks exist', () => {
-    expect(css).toMatch(/\.frame \{[^}]*border: 1px solid/);
-    expect(css).toMatch(/\.plus\.tl/);
-    expect(css).toMatch(/\.plus\.br/);
-  });
-  it('card shadows stay tight and low (no blur larger than 8px)', () => {
-    const shadows = [...css.matchAll(/--shadow(?:-pop)?:\s*([^;]+);/g)].map(m => m[1]);
-    for (const sh of shadows.filter(x => !/inset/.test(x.split(',')[0]) || true)) {
-      for (const m of sh.matchAll(/-?\d+(?:px)?\s+-?\d+(?:px)?\s+(\d+)px/g)) expect(Number(m[1])).toBeLessThanOrEqual(24);
-    }
-    expect(css).toMatch(/--shadow: 0 1px 5px -4px rgba\(36, 36, 36, 0\.7\), 0 4px 8px 0 rgba\(36, 36, 36, 0\.05\)/);
+  it('the theme files, the switch and the no-flash script are gone', () => {
+    expect(existsSync('components/ThemeToggle.tsx')).toBe(false);
+    expect(existsSync('lib/theme.ts')).toBe(false);
+    expect(layout).not.toMatch(/themeInitScript|data-theme|suppressHydrationWarning/);
+    expect(readFileSync('components/Nav.tsx', 'utf8')).not.toMatch(/ThemeToggle/);
   });
 });
 
-describe('the two dark blocks cannot drift apart', () => {
-  it('"system dark" and "chosen dark" use identical colours', () => expect(darkMedia).toEqual(darkAttr));
-  it('light and dark are genuinely different', () => { expect(light.canvas).not.toBe(darkAttr.canvas); expect(lum(light.canvas)).toBeGreaterThan(lum(darkAttr.canvas)); });
-});
-
-describe('the theme switch (Light and Dark only)', () => {
-  const matchMedia = (dark: boolean) => vi.stubGlobal('matchMedia', (q: string) => ({ matches: dark && q.includes('dark'), media: q, addEventListener() {}, removeEventListener() {} }));
-  beforeEach(() => { localStorage.clear(); document.documentElement.removeAttribute('data-theme'); matchMedia(false); });
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
-  const pressed = () => screen.getAllByRole('button').filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent);
-
-  it('has exactly two buttons, Light and Dark, and no System option', () => {
-    render(<ThemeToggle />);
-    expect(screen.getAllByRole('button').map(b => b.textContent)).toEqual(['Light', 'Dark']);
-    expect(screen.queryByText(/System/)).toBeNull();
-    expect(screen.getByRole('group', { name: 'Colour theme' })).toBeTruthy();
+describe('shape and decoration', () => {
+  it('buttons, cards and the chat panel use a 6px radius and inputs 4px', () => {
+    expect(css).not.toMatch(/border-radius: (100|29|12|14|10)px/);
+    expect(css).toMatch(/\.btn \{[^}]*border-radius: 6px/);
+    expect(css).toMatch(/\.card \{[^}]*border-radius: 6px/);
+    expect(css).toMatch(/\.left \{[^}]*border-radius: 6px/);
+    expect(css).toMatch(/\.inp \{[^}]*border-radius: 4px/);
+    expect(css).toMatch(/\.logo \{[^}]*border-radius: 6px/);
   });
-  it('Dark sets data-theme="dark" and remembers it; Light sets "light"', () => {
-    applyTheme('dark');
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(localStorage.getItem(THEME_KEY)).toBe('dark');
-    expect(readTheme()).toBe('dark');
-    applyTheme('light');
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    expect(readTheme()).toBe('light');
+  it('the old frame, corner marks, hero strip and rubber stamp are removed', () => {
+    for (const sel of ['\\.frame', '\\.plus', '\\.hero', '\\.stamp', '\\.eyebrow']) expect(css, sel).not.toMatch(new RegExp(sel + '[ .{:,]'));
+    const app = readFileSync('components/App.tsx', 'utf8'), res = readFileSync('components/Results.tsx', 'utf8');
+    expect(app).not.toMatch(/className="frame"|className="plus|className="hero/);
+    expect(res).not.toMatch(/stamp/);
   });
-  it('before anything is saved the page follows the device, and the matching button is marked', () => {
-    matchMedia(true);
-    expect(readTheme()).toBeNull();
-    expect(effectiveTheme()).toBe('dark');
-    render(<ThemeToggle />);
-    expect(pressed()).toEqual(['Dark']);
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);   // CSS follows the device until a choice is made
-    cleanup();
-    matchMedia(false);
-    render(<ThemeToggle />);
-    expect(pressed()).toEqual(['Light']);
+  it('a verdict bar shows the status, and the nav carries the date in monospace', () => {
+    for (const c of ['verdict-red', 'verdict-amber', 'verdict-green', 'verdict-dot', 'verdict-label']) expect(css).toContain('.' + c);
+    expect(css).toMatch(/\.nav-today \{[^}]*var\(--mono\)/);
+    expect(css).toMatch(/td\.num, th\.num[^{]*\{ font-family: var\(--mono\)/);
   });
-  it('a saved choice beats the device setting', () => {
-    matchMedia(true);
-    localStorage.setItem(THEME_KEY, 'light');
-    expect(effectiveTheme()).toBe('light');
-    render(<ThemeToggle />);
-    expect(pressed()).toEqual(['Light']);
-  });
-  it('ignores a corrupted saved value, including the old "system" value', () => {
-    for (const bad of ['purple', 'system', '']) { localStorage.setItem(THEME_KEY, bad); expect(readTheme()).toBeNull(); }
-  });
-  it('still applies the theme when browser storage is blocked, and never throws', () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
-    expect(() => applyTheme('dark')).not.toThrow();
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(readTheme()).toBeNull();
-    expect(effectiveTheme()).toBe('light');
-    expect(() => new Function(themeInitScript)()).not.toThrow();      // the no-flash script is safe too
-  });
-  it('the head script applies a saved theme before the page renders, and ignores anything else', () => {
-    localStorage.setItem(THEME_KEY, 'dark');
-    new Function(themeInitScript)();
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    document.documentElement.removeAttribute('data-theme');
-    for (const bad of ['bogus', 'system']) { localStorage.setItem(THEME_KEY, bad); new Function(themeInitScript)(); expect(document.documentElement.hasAttribute('data-theme')).toBe(false); }
-  });
-  it('clicking a button switches the page and moves the highlight', () => {
-    render(<ThemeToggle />);
-    fireEvent.click(screen.getByRole('button', { name: /Dark/ }));
-    expect(pressed()).toEqual(['Dark']);
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    fireEvent.click(screen.getByRole('button', { name: /Light/ }));
-    expect(pressed()).toEqual(['Light']);
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-  });
-  it('remembers the choice on the next visit', () => {
-    const first = render(<ThemeToggle />);
-    fireEvent.click(screen.getByRole('button', { name: /Dark/ }));
-    first.unmount();
-    render(<ThemeToggle />);
-    expect(pressed()).toEqual(['Dark']);
+  it('uses DM Sans, Inter and JetBrains Mono', () => {
+    expect(layout).toMatch(/DM_Sans/); expect(layout).toMatch(/JetBrains_Mono/); expect(layout).toMatch(/Inter/);
+    expect(layout).not.toMatch(/Cal_Sans/);
   });
 });

@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import ThemeToggle from './ThemeToggle';
 
 export type NavKey = 'chat' | 'upload' | 'example' | 'rulebook' | 'carriers' | 'about';
 
@@ -13,11 +12,11 @@ export const NAV_ITEMS: { key: Exclude<NavKey, 'about'>; label: string }[] = [
 ];
 
 /**
- * Sticky header. Left: the five main views, then About. Right: New booking and the Light/Dark switch.
+ * Sticky header. Left: the five main views, then About. Right: New booking.
  * Under 700px the left group and the right-hand links are hidden by CSS and the Menu button takes over;
  * the Menu list is only in the page while it is open, so each item exists once at any time.
  */
-export default function Nav({ current, onGo, onNew }: { current: NavKey; onGo: (k: NavKey) => void; onNew: () => void }) {
+export default function Nav({ current, onGo, onNew, today }: { current: NavKey; onGo: (k: NavKey) => void; onNew: () => void; today?: string }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -42,6 +41,7 @@ export default function Nav({ current, onGo, onNew }: { current: NavKey; onGo: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></svg>
           </span>
           <span className="wordmark">GYST Shipments</span>
+          {today ? <span className="nav-today" title="Every check runs against today’s date">{today}</span> : null}
         </div>
         <ul className="navlinks">
           {NAV_ITEMS.map(i => (
@@ -54,7 +54,6 @@ export default function Nav({ current, onGo, onNew }: { current: NavKey; onGo: (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>Menu
           </button>
           <button type="button" className="btn small ghost navnew" onClick={onNew}>New booking</button>
-          <ThemeToggle />
           {open ? (
             <ul id="nav-menu" className="navmenu" aria-label="Menu">
               {NAV_ITEMS.map(i => (

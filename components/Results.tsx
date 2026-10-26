@@ -25,17 +25,21 @@ function RuleStrip({ ev }: { ev: any }) {
   );
 }
 
-function Verdict({ b, ev, thumpKey }: { b: any; ev: any; thumpKey: number }) {
-  const map = ({ blocked: ['HOLD', 'red'], warning: ['CHECK', 'amber'], clear: ['CLEAR', 'green'] } as any)[ev.status];
-  const title = ev.status === 'blocked' ? plural(ev.counts.red, 'problem') + ' to fix before this ships'
-    : ev.status === 'warning' ? 'Can ship, but ' + plural(ev.counts.amber, 'thing') + ' need a look' : 'No problems found';
+function Verdict({ b, ev }: { b: any; ev: any; thumpKey?: number }) {
+  const { status, counts } = ev;
+  const cfg = ({
+    blocked: { label: 'BLOCKED', sub: counts.red + ' issue' + (counts.red !== 1 ? 's' : '') + ' must be fixed before this ships', cls: 'red' },
+    warning: { label: 'ADVISORY', sub: counts.amber + ' warning' + (counts.amber !== 1 ? 's' : '') + ': can ship but should be reviewed', cls: 'amber' },
+    clear: { label: 'CLEAR TO SHIP', sub: 'All ten pre-flight checks passed', cls: 'green' },
+  } as any)[status];
   return (
-    <div className="card verdict">
-      <span key={thumpKey} className={'stamp ' + map[1] + ' thump'} aria-hidden="true">{map[0]}</span>
-      <div>
-        <h2>{title}</h2>
-        <p className="sub">{idLabel(b) + ' for ' + (b.seller || 'unnamed seller') + ', ' + (b.originCity || '?') + ' to ' + (b.destCity || b.destCountry || '?') + (ev.counts.red || ev.counts.amber ? '. ' + ev.counts.red + ' red, ' + ev.counts.amber + ' amber.' : '.')}</p>
+    <div className={'card verdict verdict-' + cfg.cls}>
+      <div className="verdict-status">
+        <span className="verdict-dot" aria-hidden="true" />
+        <span className="verdict-label">{cfg.label}</span>
+        <span className="verdict-sub">{cfg.sub}</span>
       </div>
+      <p className="sub">{idLabel(b) + ' for ' + (b.seller || 'unnamed seller') + ' · ' + (b.originCity || '?') + ' → ' + (b.destCity || b.destCountry || '?')}</p>
       <RuleStrip ev={ev} />
     </div>
   );
@@ -419,7 +423,7 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
               const go = () => { setSel(uid(b)); window.scrollTo({ top: 0 }); };
               return (
                 <tr key={uid(b)} className="click" tabIndex={0} role="link" aria-label={'Open ' + idLabel(b)} onClick={go} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } }}>
-                  <td><b>{idLabel(b)}</b>{b._ref ? <div className="note">{b._ref}</div> : null}</td><td>{b.seller || '—'}</td><td>{(b.originCity || '?') + ' to ' + (b.destCity || '?')}</td>
+                  <td><b className="mono">{idLabel(b)}</b>{b._ref ? <div className="note">{b._ref}</div> : null}</td><td>{b.seller || '—'}</td><td>{(b.originCity || '?') + ' to ' + (b.destCity || '?')}</td>
                   <td className="num">{b.pallets != null ? b.pallets : '—'}</td>
                   <td className="num">{ev.counts.red + ev.counts.amber}</td>
                   <td>{c ? c.carrier + ', ' + (r.pallets ? PF.gbp(c.price * r.pallets) : '—') : (r.error || r.blocked ? '—' : 'None fits')}</td>

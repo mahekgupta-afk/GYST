@@ -28,28 +28,28 @@ const sendChat = async (text: string) => {
 };
 
 describe('header navigation', () => {
-  it('shows the GYST Shipments label and the Light/Dark switch', () => {
+  it('shows the GYST Shipments label and today’s date, and has no theme switch', () => {
     render(<App />);
     expect(within(nav()).getByText('GYST Shipments')).toBeTruthy();
-    expect(within(nav()).getByRole('button', { name: /Light/ })).toBeTruthy();
-    expect(within(nav()).getByRole('button', { name: /Dark/ })).toBeTruthy();
+    expect(nav().querySelector('.nav-today')!.textContent).toMatch(/^\d{1,2} [A-Z][a-z]{2} \d{4}$/);
+    expect(within(nav()).queryByRole('button', { name: /Light|Dark/ })).toBeNull();
   });
 
   it('left group is in the specified order, the right cluster is New booking, switch, About, with no Template item', () => {
     render(<App />);
     const labels = tabbable().map(label).filter(t => t !== 'Menu');
-    expect(labels).toEqual(['Chat to book', 'Upload a file', 'Try an example', 'Rulebook', 'Carrier options', 'About', 'New booking', 'Light', 'Dark']);
+    expect(labels).toEqual(['Chat to book', 'Upload a file', 'Try an example', 'Rulebook', 'Carrier options', 'About', 'New booking']);
     expect(labels.some(l => /template/i.test(l))).toBe(false);
   });
 
-  it('About sits immediately after Carrier options, as a link styled like its neighbours, and the switch is rightmost', () => {
+  it('About sits immediately after Carrier options, as a link styled like its neighbours, and New booking is rightmost', () => {
     render(<App />);
     const all = tabbable().filter(e => label(e) !== 'Menu');
     const i = all.findIndex(e => label(e) === 'Carrier options');
     expect(label(all[i + 1])).toBe('About');
     expect(all[i + 1].tagName).toBe('A');
     expect(all[i + 1].className).toBe('navlink');
-    expect(label(all[all.length - 1])).toBe('Dark');
+    expect(label(all[all.length - 1])).toBe('New booking');
   });
 
   it('tab order follows the visual order: brand, left group, then the right cluster', () => {
@@ -59,7 +59,6 @@ describe('header navigation', () => {
     expect(pos('Chat to book')).toBeLessThan(pos('Upload a file'));
     expect(pos('Carrier options')).toBeLessThan(pos('About'));
     expect(pos('About')).toBeLessThan(pos('New booking'));
-    expect(pos('New booking')).toBeLessThan(pos('Light'));
   });
 
   it('Chat to book: switches to the Chat tab, focuses the message box, scrolls to the app', async () => {
