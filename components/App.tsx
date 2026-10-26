@@ -69,7 +69,7 @@ export default function App() {
       if (!nav || !hero) return;
       const nh = Math.ceil(nav.getBoundingClientRect().height);
       document.documentElement.style.setProperty('--nav-h', nh + 'px');
-      document.documentElement.style.setProperty('--chrome', nh + Math.ceil(hero.getBoundingClientRect().height) + 84 + 'px');
+      document.documentElement.style.setProperty('--chrome', nh + Math.ceil(hero.getBoundingClientRect().height) + 58 + 'px');
     };
     set();
     const raf = requestAnimationFrame(() => requestAnimationFrame(set));

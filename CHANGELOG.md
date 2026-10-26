@@ -97,6 +97,10 @@ About is now in the left group of the header, directly after Carrier options, st
 
 The label next to the logo in the header now reads "GYST Shipments" (was "UK to EU shipments"). Text only.
 
+## Larger chat panel
+
+The chat panel is taller. The header's headline block is compacted on windows up to 900px tall (the eyebrow and tagline hide there, as they already did up to 760px), the spare space below the panel is smaller, and the panel's minimum height is 460px (was 380px). On a 720px-tall window the panel is 471px (was 380px) and the message box is still on screen when the page opens; at 820px it is 571px. The sticky panel is capped so it always fits under the sticky header. Layout only.
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.
