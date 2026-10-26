@@ -45,6 +45,9 @@ export default function App() {
   const inputEl = useRef<HTMLTextAreaElement>(null);
   const fileEl = useRef<HTMLInputElement>(null);
   const invoiceEl = useRef<HTMLInputElement>(null);
+  // An invoice the seller has chosen but not sent yet, and a temporary address for its thumbnail.
+  const [pending, setPending] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const setM = (m: Msg[]) => { msgsRef.current = m; setMsgs(m); };
   const say = (role: Msg['role'], text: string, chips?: string[] | null, typing?: boolean) => setM([...msgsRef.current, { role, text, chips: chips || null, typing: !!typing }]);
@@ -106,6 +109,13 @@ export default function App() {
     window.addEventListener('scroll', spy, { passive: true });
     return () => window.removeEventListener('scroll', spy);
   }, []);
+  // The thumbnail's address is released as soon as the attachment is removed, replaced or sent, and when the page closes.
+  useEffect(() => {
+    if (!pending || !pending.type.startsWith('image/') || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') { setPreviewUrl(null); return; }
+    const url = URL.createObjectURL(pending);
+    setPreviewUrl(url);
+    return () => { URL.revokeObjectURL(url); };
+  }, [pending]);
   useEffect(() => { if (focusChat > 0) inputEl.current?.focus({ preventScroll: true }); }, [focusChat]);
   useEffect(() => { const el = logEl.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs]);
   // Grow with the text. An empty box keeps its natural height (measuring it at page load could leave it stuck at the maximum).
@@ -262,6 +272,19 @@ export default function App() {
     bump();
   }
 
+  /** Send: the attached invoice (if any) first, then any text typed with it. Nothing is sent until this is pressed. */
+  async function submit() {
+    if (busy) return;
+    const file = pending, text = input.trim();
+    if (!file && !text) return;
+    if (!file) { void send(); return; }
+    setPending(null); setInput('');
+    if (invoiceEl.current) invoiceEl.current.value = '';
+    await handleInvoice(file);
+    if (text) await send(text);
+  }
+  const chooseInvoice = (f: File | undefined | null) => { if (f) setPending(f); };
+
   /** Records a booking through the server, which re-checks the rulebook and refuses red bookings. */
   /**
    * Records a booking through the server, which re-checks the rulebook and refuses red bookings.
@@ -382,7 +405,7 @@ export default function App() {
 
   /** Clears everything: chat, booking, results, any uploaded file and any example. Same as typing "start over". */
   function newBooking() {
-    greet(); setUpload(null); setSelState(null); setFilter('all'); setUploadMsg(''); setSaveNote(''); setInput('');
+    greet(); setUpload(null); setSelState(null); setFilter('all'); setUploadMsg(''); setSaveNote(''); setInput(''); setPending(null);
     setMode('chat'); setFocusChat(n => n + 1); thump();
   }
   const reduced = () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -442,20 +465,29 @@ export default function App() {
               ))}
             </div>
             <div className={'composer' + (aiOn ? ' has-attach' : '')}>
+              {pending ? (
+                <div className="attachprev" role="group" aria-label="Attached invoice">
+                  {previewUrl ? <img src={previewUrl} alt={'Preview of ' + pending.name} /> : <span className="attachdoc" aria-hidden="true">{pending.type === 'application/pdf' ? 'PDF' : 'FILE'}</span>}
+                  <span className="attachname"><b>{pending.name}</b><span>{Math.max(1, Math.round(pending.size / 1024)).toLocaleString('en-GB')} KB · press Send to read it</span></span>
+                  <button type="button" className="attachx" aria-label="Remove attachment" title="Remove" disabled={busy} onClick={() => setPending(null)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </button>
+                </div>
+              ) : null}
               {aiOn ? (
                 <>
                   <button type="button" className="attach" aria-label="Attach an invoice" title="Attach an invoice (picture or PDF)" disabled={busy} onClick={() => invoiceEl.current?.click()}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21.4 11.1l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8" /></svg>
                   </button>
                   <input ref={invoiceEl} type="file" accept="image/png,image/jpeg,image/webp,application/pdf" className="sr" tabIndex={-1} aria-label="Invoice file"
-                    onChange={e => { const f = e.target.files?.[0]; if (f) void handleInvoice(f); e.target.value = ''; }} />
+                    onChange={e => { chooseInvoice(e.target.files?.[0]); e.target.value = ''; }} />
                 </>
               ) : null}
-              <textarea ref={inputEl} rows={1} value={input} placeholder="Describe your shipment…" aria-label="Your message"
+              <textarea ref={inputEl} rows={1} value={input} placeholder="Your shipment…" aria-label="Your message"
                 onChange={e => setInput(e.target.value)}
-                onPaste={e => { const f = aiOn ? Array.from(e.clipboardData.files || []).find(x => x.type.startsWith('image/')) : null; if (f) { e.preventDefault(); void handleInvoice(f); } }}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
-              <button className="btn" disabled={busy} onClick={() => send()}>Send</button>
+                onPaste={e => { const f = aiOn ? Array.from(e.clipboardData.files || []).find(x => x.type.startsWith('image/')) : null; if (f) { e.preventDefault(); chooseInvoice(f); } }}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); } }} />
+              <button className="btn" disabled={busy || (!input.trim() && !pending)} onClick={() => void submit()}>Send</button>
               <div className="aibar"><span>Say “start over” at any time to begin a new booking.</span>{aiOn ? <span>Invoices are read once to fill in the details and are not stored.</span> : null}</div>
             </div>
           </div>

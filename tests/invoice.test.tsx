@@ -81,9 +81,11 @@ describe('an invoice through the chat engine', () => {
 describe('in the chat', () => {
   const reply = (body: any, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }));
   let calls: string[];
+  let urls = 0;
   const setup = (invoiceReply: () => Promise<Response>, aiEnabled = true) => {
     calls = [];
     Element.prototype.scrollIntoView = vi.fn(); window.scrollTo = vi.fn() as any;
+    URL.createObjectURL = vi.fn(() => 'blob:preview-' + ++urls) as any; URL.revokeObjectURL = vi.fn() as any;
     vi.stubGlobal('fetch', vi.fn((url: string) => { calls.push(String(url)); return String(url).includes('read-invoice') ? invoiceReply() : reply({ enabled: aiEnabled }); }));
   };
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -91,6 +93,7 @@ describe('in the chat', () => {
     const input = screen.getByLabelText('Invoice file') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [new File(['x'], name, { type })] } });
   };
+  const send = () => fireEvent.click(screen.getByRole('button', { name: 'Send' }));
   const lastBot = () => [...document.querySelectorAll('.msg.bot')].at(-1)!.textContent!;
 
   it('shows no attach button when the reader is not available', async () => {
@@ -105,7 +108,7 @@ describe('in the chat', () => {
     render(<App />);
     const btn = await screen.findByLabelText('Attach an invoice');
     expect(btn.hasAttribute('disabled')).toBe(false);
-    attach();
+    attach(); send();
     await waitFor(() => expect(lastBot()).toContain('Here is what I read from your invoice'));
     const bot = lastBot();
     expect(bot).toContain('Please check it is right');
@@ -121,7 +124,7 @@ describe('in the chat', () => {
   it('refuses an invoice in another currency and changes nothing', async () => {
     setup(() => reply({ result: guardInvoice(good({ currency: 'EUR' })) }));
     render(<App />);
-    await screen.findByLabelText('Attach an invoice'); attach();
+    await screen.findByLabelText('Attach an invoice'); attach(); send();
     await waitFor(() => expect(lastBot()).toContain('This invoice is in EUR'));
     expect(document.querySelector('.right')!.textContent).not.toContain('Northfield');
   });
@@ -129,21 +132,21 @@ describe('in the chat', () => {
   it('says so when the file is not an invoice', async () => {
     setup(() => reply({ result: guardInvoice(good({ isInvoice: false })) }));
     render(<App />);
-    await screen.findByLabelText('Attach an invoice'); attach();
+    await screen.findByLabelText('Attach an invoice'); attach(); send();
     await waitFor(() => expect(lastBot()).toContain('doesn’t look like an invoice'));
   });
 
   it('says which destination it cannot book', async () => {
     setup(() => reply({ result: guardInvoice(good({ destCity: 'Warsaw', destCountry: 'Poland' })) }));
     render(<App />);
-    await screen.findByLabelText('Attach an invoice'); attach();
+    await screen.findByLabelText('Attach an invoice'); attach(); send();
     await waitFor(() => expect(lastBot()).toContain('delivers to Warsaw, Poland'));
   });
 
   it('a failed read keeps the booking and says what to do', async () => {
     setup(() => reply({ error: 'upstream' }, 502));
     render(<App />);
-    await screen.findByLabelText('Attach an invoice'); attach();
+    await screen.findByLabelText('Attach an invoice'); attach(); send();
     await waitFor(() => expect(lastBot()).toContain('couldn’t read that invoice'));
     expect(lastBot()).toContain('Nothing has been changed');
   });
@@ -151,7 +154,7 @@ describe('in the chat', () => {
   it('refuses a file type it cannot read, without sending it', async () => {
     setup(() => reply({}));
     render(<App />);
-    await screen.findByLabelText('Attach an invoice'); attach('notes.txt', 'text/plain');
+    await screen.findByLabelText('Attach an invoice'); attach('notes.txt', 'text/plain'); send();
     await waitFor(() => expect(lastBot()).toContain('PNG, JPG or WebP'));
     expect(calls.some(u => u.includes('read-invoice'))).toBe(false);
   });
@@ -159,8 +162,100 @@ describe('in the chat', () => {
   it('is not stored: nothing but the reader and the AI-status check is called', async () => {
     setup(() => reply({ result: guardInvoice(good()) }));
     render(<App />);
-    await screen.findByLabelText('Attach an invoice'); attach();
+    await screen.findByLabelText('Attach an invoice'); attach(); send();
     await waitFor(() => expect(lastBot()).toContain('Here is what I read'));
     expect(calls.filter(u => !u.includes('parse-message') && !u.includes('read-invoice'))).toEqual([]);
+  });
+
+  describe('review before sending', () => {
+    const read = () => calls.filter(u => u.includes('read-invoice')).length;
+    it('choosing a picture shows a preview and does NOT send it', async () => {
+      setup(() => reply({ result: guardInvoice(good()) }));
+      render(<App />);
+      await screen.findByLabelText('Attach an invoice'); attach('inv.png');
+      const img = await screen.findByAltText('Preview of inv.png') as HTMLImageElement;
+      expect(img.getAttribute('src')).toMatch(/^blob:preview-/);
+      expect(screen.getByRole('button', { name: 'Remove attachment' })).toBeTruthy();
+      await new Promise(r => setTimeout(r, 50));
+      expect(read()).toBe(0);
+      expect(document.querySelector('.log')!.textContent).not.toContain('Invoice attached');
+    });
+    it('the X removes it without sending, and releases the preview address', async () => {
+      setup(() => reply({}));
+      render(<App />);
+      await screen.findByLabelText('Attach an invoice'); attach();
+      const img = await screen.findByAltText('Preview of inv.png');
+      const url = img.getAttribute('src');
+      fireEvent.click(screen.getByRole('button', { name: 'Remove attachment' }));
+      expect(screen.queryByAltText('Preview of inv.png')).toBeNull();
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith(url);
+      expect(read()).toBe(0);
+      expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
+    });
+    it('choosing a different picture replaces the first and releases its address', async () => {
+      setup(() => reply({}));
+      render(<App />);
+      await screen.findByLabelText('Attach an invoice'); attach('one.png');
+      const first = (await screen.findByAltText('Preview of one.png')).getAttribute('src');
+      attach('two.png');
+      await screen.findByAltText('Preview of two.png');
+      expect(screen.queryByAltText('Preview of one.png')).toBeNull();
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith(first);
+    });
+    it('Send is off with nothing to send, and on with text or with an attachment', async () => {
+      setup(() => reply({}));
+      render(<App />);
+      await screen.findByLabelText('Attach an invoice');
+      const btn = () => screen.getByRole('button', { name: 'Send' });
+      expect(btn().hasAttribute('disabled')).toBe(true);
+      fireEvent.change(screen.getByLabelText('Your message'), { target: { value: 'hello' } });
+      expect(btn().hasAttribute('disabled')).toBe(false);
+      fireEvent.change(screen.getByLabelText('Your message'), { target: { value: '' } });
+      attach();
+      await screen.findByAltText('Preview of inv.png');
+      expect(btn().hasAttribute('disabled')).toBe(false);
+    });
+    it('Send reads the invoice once, then clears the preview and releases its address; the same file can be chosen again', async () => {
+      setup(() => reply({ result: guardInvoice(good()) }));
+      render(<App />);
+      await screen.findByLabelText('Attach an invoice'); attach('inv.png');
+      const url = (await screen.findByAltText('Preview of inv.png')).getAttribute('src');
+      send();
+      await waitFor(() => expect(lastBot()).toContain('Here is what I read'));
+      expect(read()).toBe(1);
+      expect(screen.queryByAltText('Preview of inv.png')).toBeNull();
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith(url);
+      expect((screen.getByLabelText('Invoice file') as HTMLInputElement).value).toBe('');
+      attach('inv.png');                                                        // the same file again
+      await screen.findByAltText('Preview of inv.png');
+    });
+    it('an attachment with a typed message sends the invoice first, then the message', async () => {
+      setup(() => reply({ result: guardInvoice(good()) }));
+      render(<App />);
+      await screen.findByLabelText('Attach an invoice'); attach();
+      await screen.findByAltText('Preview of inv.png');
+      fireEvent.change(screen.getByLabelText('Your message'), { target: { value: 'ready date 5 Nov, cheapest' } });
+      send();
+      await waitFor(() => expect(document.querySelectorAll('.msg.user').length).toBe(2));
+      const users = [...document.querySelectorAll('.msg.user')].map(e => e.textContent);
+      expect(users).toEqual(['Invoice attached: inv.png', 'ready date 5 Nov, cheapest']);
+      await waitFor(() => expect((screen.getByLabelText('Your message') as HTMLTextAreaElement).value).toBe(''));
+      expect(read()).toBe(1);
+    });
+    it('a PDF shows a file tile instead of a thumbnail', async () => {
+      setup(() => reply({}));
+      render(<App />);
+      await screen.findByLabelText('Attach an invoice'); attach('inv.pdf', 'application/pdf');
+      await waitFor(() => expect(document.querySelector('.attachdoc')!.textContent).toBe('PDF'));
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
+    it('Enter sends the attachment too', async () => {
+      setup(() => reply({ result: guardInvoice(good()) }));
+      render(<App />);
+      await screen.findByLabelText('Attach an invoice'); attach();
+      await screen.findByAltText('Preview of inv.png');
+      fireEvent.keyDown(screen.getByLabelText('Your message'), { key: 'Enter' });
+      await waitFor(() => expect(lastBot()).toContain('Here is what I read'));
+    });
   });
 });
