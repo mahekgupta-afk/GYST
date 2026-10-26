@@ -89,9 +89,9 @@ R-01 to R-10, their severities, the carrier rate card and all existing validatio
 
 Layout only. Team cards have a fixed, even width instead of stretching across the page; Contact is a bordered card of labelled rows (Email, Telephone, set in `content/about.ts`) with the same mailto and tel links; headings get more space above them. Wording is unchanged.
 
-## About beside Carrier options, team section removed
+## About next to Carrier options in the header, team section removed, smaller theme switch
 
-Layout and content only. Carrier options and About now share a row on screens wider than 1100px (about 58% / 42%) and stack below that. The team section ("The team" and the two partner cards) is removed from `content/about.ts`, `components/About.tsx` and the stylesheet. The header highlight now follows whichever section's top has passed most recently, and keeps the current one when two sections share a row. Proved by: `tests/about.test.tsx` (no team content or cards, the two sections are siblings in one row, the stacking rule) and a browser check at 1360px and phone width.
+About is now in the left group of the header, directly after Carrier options, styled like its neighbours; the right cluster is New booking and the Light/Dark switch (the phone Menu is unchanged, About last). An earlier change that put the About section beside the Carrier options section on the page was a misreading and has been reverted: the page order is again Carrier options, Rulebook, About. The team section ("The team" and the two partner cards) stays removed. The Light/Dark switch text is 12px (was 13px) with smaller icons and padding. The header highlight follows the section most recently scrolled past. Proved by: `tests/nav.test.tsx` (About immediately after Carrier options, switch rightmost, tab order), `tests/about.test.tsx` (no team content, About last on the page) and a browser check at 1280px (one-row header) and 1000px (the header wraps to two rows, no horizontal scroll).
 
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).

@@ -88,16 +88,12 @@ describe('About renders every item from the content file', () => {
 describe('the About link', () => {
   beforeEach(() => { Element.prototype.scrollIntoView = vi.fn(); window.scrollTo = vi.fn() as any; vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{"enabled":false}', { status: 200 })))); });
   afterEach(() => vi.unstubAllGlobals());
-  it('scrolls to the section, which sits beside Carrier options, and marks it current', async () => {
+  it('scrolls to the section at the bottom of the page and marks it current', async () => {
     const App = (await import('../components/App')).default;
     render(<App />);
     const target = document.getElementById('about')!;
     expect(target.tagName).toBe('SECTION');
-    const row = target.parentElement!;
-    expect(row.className).toBe('pair');
-    expect([...row.children].map(e => e.id)).toEqual(['carriers', 'about']);       // side by side on wide screens
-    expect(css).toMatch(/\.pair \{[^}]*grid-template-columns: minmax\(0, 1\.4fr\) minmax\(0, 1fr\)/);
-    expect(css).toMatch(/@media \(max-width: 1100px\) \{ \.pair \{ grid-template-columns: minmax\(0, 1fr\); \} \}/);       // stacked on narrow ones
+    expect(target.parentElement!.lastElementChild).toBe(target);                  // last thing on the page
     fireEvent.click(within(screen.getByRole('navigation', { name: 'App' })).getByRole('link', { name: 'About' }));
     expect((Element.prototype.scrollIntoView as any).mock.contexts.at(-1)).toBe(target);
     expect(within(screen.getByRole('navigation', { name: 'App' })).getByRole('link', { name: 'About' }).getAttribute('aria-current')).toBe('true');

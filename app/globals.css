@@ -81,11 +81,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
 .navlink { display: inline-flex; align-items: center; border: 1px solid transparent; background: transparent; color: var(--ink2); border-radius: 100px; padding: 6px 12px; min-height: 36px; font: 500 14px/1 var(--body); text-decoration: none; cursor: pointer; transition: background-color .15s ease-out, color .15s ease-out; }
 .navlink:hover { background: var(--paper2); color: var(--ink); }
 .navlink[aria-current="true"] { background: var(--brand-soft); color: var(--ink); border-color: var(--line); font-weight: 600; }
-.navlink:focus-visible, .navabout:focus-visible, .navmenu-btn:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
+.navlink:focus-visible, .navmenu-btn:focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; }
 .navright { position: relative; display: flex; align-items: center; gap: 10px; margin-left: auto; flex: none; }
-.navabout { color: var(--ink); font: 500 14px/1 var(--body); text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 1px; padding: 8px 6px; border-radius: 6px; }
-.navabout:hover { text-decoration-thickness: 2px; }
-.navabout[aria-current="true"] { font-weight: 700; text-decoration-thickness: 2px; }
 .navmenu-btn { display: none; align-items: center; gap: 6px; border: 1px solid var(--edge); background: var(--paper); color: var(--ink); border-radius: 100px; padding: 4px 14px 4px 11px; min-height: 36px; font: 500 14px/1 var(--body); cursor: pointer; }
 .navmenu-btn svg { width: 16px; height: 16px; }
 .navmenu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 50; width: min(280px, calc(100vw - 32px)); margin: 0; padding: 6px; list-style: none; background: var(--paper); border: 1px solid var(--frame); border-radius: 14px; box-shadow: var(--shadow-pop); }
@@ -97,7 +94,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
   .navright .theme .lbl { display: none; }
 }
 @media (max-width: 700px) {
-  .navlinks, .navnew, .navabout { display: none; }
+  .navlinks, .navnew { display: none; }
   .navmenu-btn { display: inline-flex; }
   .nav { flex-wrap: nowrap; gap: 8px; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
   .brandrow { flex: 1 1 0; min-width: 0; }
@@ -112,10 +109,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
 .today { display: inline-block; margin-top: 14px; font-size: 13px; font-weight: 500; color: var(--ink2); background: var(--paper); border: 1px solid var(--line); border-radius: 100px; padding: 6px 14px; }
 
 .theme { display: inline-flex; align-items: center; border: 1px solid var(--edge); background: var(--paper); border-radius: 100px; padding: 2px; gap: 2px; }
-.theme button { border: 0; background: transparent; color: var(--ink2); border-radius: 100px; padding: 4px 11px; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; min-height: 30px; transition: background-color .15s ease-out, color .15s ease-out; }
+.theme button { border: 0; background: transparent; color: var(--ink2); border-radius: 100px; padding: 3px 9px; font-size: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 5px; min-height: 28px; transition: background-color .15s ease-out, color .15s ease-out; }
 .theme button:hover { background: var(--paper2); color: var(--ink); }
 .theme button[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); }
-.theme svg { width: 15px; height: 15px; flex: none; }
+.theme svg { width: 13px; height: 13px; flex: none; }
 
 /* ---- carrier options ---- */
 .co { margin-top: 24px; }
@@ -137,11 +134,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--brand); }
 .co-win-row li span { color: var(--ink2); }
 
 /* ---- about ---- */
-.about { margin-top: 0; }
-/* Carrier options and About share a row on wide screens and stack on narrow ones */
-.pair { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 24px; }
-.pair > .co { margin-top: 0; }
-@media (max-width: 1100px) { .pair { grid-template-columns: minmax(0, 1fr); } }
+.about { margin-top: 24px; }
 .about h2 { font: 400 clamp(22px, 2.6vw, 28px)/1.15 var(--display); margin: 0 0 6px; }
 .card.about h3 { margin: 34px 0 10px; }
 .card.about h2 + .about-tag + h3 { margin-top: 26px; }

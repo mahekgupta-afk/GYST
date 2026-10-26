@@ -38,19 +38,18 @@ describe('header navigation', () => {
   it('left group is in the specified order, the right cluster is New booking, switch, About, with no Template item', () => {
     render(<App />);
     const labels = tabbable().map(label).filter(t => t !== 'Menu');
-    expect(labels).toEqual(['Chat to book', 'Upload a file', 'Try an example', 'Rulebook', 'Carrier options', 'New booking', 'About', 'Light', 'Dark']);
+    expect(labels).toEqual(['Chat to book', 'Upload a file', 'Try an example', 'Rulebook', 'Carrier options', 'About', 'New booking', 'Light', 'Dark']);
     expect(labels.some(l => /template/i.test(l))).toBe(false);
   });
 
-  it('About sits immediately left of the Light/Dark switch, styled as a plain text link rather than a button', () => {
+  it('About sits immediately after Carrier options, as a link styled like its neighbours, and the switch is rightmost', () => {
     render(<App />);
     const all = tabbable().filter(e => label(e) !== 'Menu');
-    const about = all[all.length - 3];
-    expect(label(about)).toBe('About');
-    expect(label(all[all.length - 2])).toBe('Light');
-    expect(about.tagName).toBe('A');
-    expect(about.className).not.toMatch(/\bbtn\b/);
-    expect(css).toMatch(/\.navabout \{[^}]*text-decoration: underline/);
+    const i = all.findIndex(e => label(e) === 'Carrier options');
+    expect(label(all[i + 1])).toBe('About');
+    expect(all[i + 1].tagName).toBe('A');
+    expect(all[i + 1].className).toBe('navlink');
+    expect(label(all[all.length - 1])).toBe('Dark');
   });
 
   it('tab order follows the visual order: brand, left group, then the right cluster', () => {
@@ -58,9 +57,9 @@ describe('header navigation', () => {
     const order = tabbable();
     const pos = (t: string) => order.findIndex(e => label(e) === t);
     expect(pos('Chat to book')).toBeLessThan(pos('Upload a file'));
-    expect(pos('Carrier options')).toBeLessThan(pos('New booking'));
-    expect(pos('New booking')).toBeLessThan(pos('About'));
-    expect(pos('About')).toBeLessThan(pos('Light'));
+    expect(pos('Carrier options')).toBeLessThan(pos('About'));
+    expect(pos('About')).toBeLessThan(pos('New booking'));
+    expect(pos('New booking')).toBeLessThan(pos('Light'));
   });
 
   it('Chat to book: switches to the Chat tab, focuses the message box, scrolls to the app', async () => {
@@ -177,10 +176,10 @@ describe('layout rules in the stylesheet', () => {
     expect(css).toMatch(/\.topnav \{[^}]*env\(safe-area-inset-top/);
     expect(css).toMatch(/\.nav \{[^}]*env\(safe-area-inset-left/);
   });
-  it('under 700px the left links, New booking and About are hidden and Menu is shown', () => {
+  it('under 700px the left links and New booking are hidden and Menu is shown', () => {
     const m = /@media \(max-width: 700px\) \{([\s\S]*?)\n\}/.exec(css);
     expect(m).toBeTruthy();
-    expect(m![1]).toMatch(/\.navlinks, \.navnew, \.navabout \{ display: none; \}/);
+    expect(m![1]).toMatch(/\.navlinks, \.navnew \{ display: none; \}/);
     expect(m![1]).toMatch(/\.navmenu-btn \{ display: inline-flex; \}/);
     expect(css).toMatch(/\.navmenu-btn \{ display: none;/);
   });

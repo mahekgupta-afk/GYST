@@ -97,6 +97,7 @@ export default function App() {
           if (top > line) continue;
           if (top > best + 2) { best = top; tied = [id]; } else if (Math.abs(top - best) <= 2) tied.push(id);
         }
+        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4 && document.getElementById('about')) { setSection('about'); return; }
         setSection(prev => (tied.length === 0 ? 'app' : tied.includes(prev as any) ? prev : tied[0]));
       }, 60);
     };
@@ -446,10 +447,7 @@ export default function App() {
         </section>
       </main>
 
-      <div className="pair">
-        <CarrierOptions onUse={useInBooking} />
-        <About />
-      </div>
+      <CarrierOptions onUse={useInBooking} />
 
       <details className="card ref" id="rulebook" ref={rulebookEl}>
         <summary>Rulebook and rate card used for every check</summary>
@@ -474,6 +472,8 @@ export default function App() {
         </div>
       </details>
       <p className="foot">Checks run in the browser using fixed rules, so the same booking always gets the same result. Delivery dates are estimates based on calendar days in transit.</p>
+
+      <About />
       </div>
     </div>
   );

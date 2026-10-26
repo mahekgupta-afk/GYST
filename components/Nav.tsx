@@ -13,7 +13,7 @@ export const NAV_ITEMS: { key: Exclude<NavKey, 'about'>; label: string }[] = [
 ];
 
 /**
- * Sticky header. Left: the five main views. Right: New booking, About, the Light/Dark switch (rightmost).
+ * Sticky header. Left: the five main views, then About. Right: New booking and the Light/Dark switch.
  * Under 700px the left group and the right-hand links are hidden by CSS and the Menu button takes over;
  * the Menu list is only in the page while it is open, so each item exists once at any time.
  */
@@ -47,13 +47,13 @@ export default function Nav({ current, onGo, onNew }: { current: NavKey; onGo: (
           {NAV_ITEMS.map(i => (
             <li key={i.key}><button type="button" className="navlink" aria-current={cur(i.key)} onClick={() => onGo(i.key)}>{i.label}</button></li>
           ))}
+          <li><a className="navlink" href="#about" aria-current={cur('about')} onClick={e => { e.preventDefault(); onGo('about'); }}>About</a></li>
         </ul>
         <div className="navright" ref={wrap}>
           <button ref={btn} type="button" className="navmenu-btn" aria-expanded={open} aria-controls="nav-menu" onClick={() => setOpen(o => !o)}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>Menu
           </button>
           <button type="button" className="btn small ghost navnew" onClick={onNew}>New booking</button>
-          <a className="navabout" href="#about" aria-current={cur('about')} onClick={e => { e.preventDefault(); onGo('about'); }}>About</a>
           <ThemeToggle />
           {open ? (
             <ul id="nav-menu" className="navmenu" aria-label="Menu">
