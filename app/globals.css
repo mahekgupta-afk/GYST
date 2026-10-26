@@ -272,6 +272,10 @@ details .inner { padding: 16px 24px; }
 
 /* ---- fix and rebook ---- */
 .fixbox { margin-top: 12px; padding: 12px 14px; background: var(--paper2); border: 1px dashed var(--edge); border-radius: 14px; }
+.fixpreview { border: 1px solid var(--border-active); border-radius: 12px; background: var(--surface); padding: 12px 14px; display: grid; gap: 10px; }
+.previewtable { font-size: 13.5px; }
+.previewtable td.was { color: var(--ink-3); text-decoration: line-through; }
+.previewtable td.now { font-weight: 600; color: var(--green); }
 .fixhead { font: 600 12px var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink2); margin-bottom: 8px; }
 .fixbody { display: grid; gap: 10px; }
 .fixrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

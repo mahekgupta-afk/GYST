@@ -142,6 +142,14 @@ Proved by: `tests/home.test.tsx` (headline, hero card, stats counted from the en
 
 The three pills in the "Start your shipment" card (Chat to book, Upload a file, Try an example) used to only highlight, and Start did the work, so clicking a pill looked like nothing happened. Each pill now opens its way of booking immediately and also stays highlighted; Start opens the highlighted one. Smooth scrolling to a section now checks, a moment later, that it arrived, and jumps there if a long smooth scroll was interrupted. Proved by: `tests/home.test.tsx` (each pill, Start, and the jump fallback) and a browser run of every button.
 
+## Suggested fixes with a before/after preview
+
+The existing one-click fixes no longer apply instantly. Each suggested fix (`lib/autofix.ts`, `fixOptions`) now opens a preview on a COPY of the booking: a Before / After table of exactly what will be logged, the checks after the change (red and amber counts, which rules it fixes, and any rule it would open), and the price change where a carrier or pallet count moves. Nothing is applied until "Apply fix"; Cancel leaves the booking and its change log untouched. Rule logic is unchanged: a fix is a list of the same corrections the editor already used, validated by the same validators, and the unchanged engine re-runs.
+
+Offered fixes: R-02 set declared value to the items' total; R-03 three choices (cartons, quantity or units per carton, only where the division is whole); R-04 set cartons to the items' total; R-05 switch carrier or use more pallets, each with its price (or, when no carrier fits, each carrier with the pallets and price it needs); R-07 raise gross weight to the goods' weight; R-10 collect today (or pick a date); R-06 remove the item; R-08 confirm an appointment is booked (a fact only the user knows). R-01 (HS code) and R-09 (country of origin) are never auto-fixed. Typing a value yourself still applies directly. In upload mode fixes change the in-app copy and "Download corrected file (.xlsx)" produces the corrected workbook; the original upload is never touched.
+
+Proved by: `tests/autofix.test.ts` (every fix makes its rule pass, previews equal the real result across all sample bookings, previews never change the booking, no auto-fix for R-01 and R-09, invalid values refused) and `tests/autofix-ui.test.tsx` (preview, cancel, apply and log in the app).
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.

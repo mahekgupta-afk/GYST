@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from 'react';
 import { PF } from '@/lib/pf';
 import { suggestions, itemFlags, type Spec, type ApplyResult } from '@/lib/fixes';
+import { fixOptions, previewFix, money, type FixOption } from '@/lib/autofix';
 import { checkNumber, checkHs, checkReadyDate, inlineError, type FieldKey } from '@/lib/validate';
 
 type Fix = (s: Spec) => ApplyResult | void;
@@ -75,9 +76,43 @@ const Btn = ({ children, onClick, ghost }: { children: ReactNode; onClick: () =>
   <button type="button" className={'btn small' + (ghost ? ' ghost' : '')} onClick={onClick}>{children}</button>;
 
 /* ---------- per-issue fix controls ---------- */
+/** A suggested fix is previewed (before → after, and what the checks say afterwards) and only applied when the user confirms. */
+function FixPreviewBox({ b, option, fix, onDone }: { b: any; option: FixOption; fix: Fix; onDone: () => void }) {
+  const [err, setErr] = useState('');
+  const pv = previewFix(b, option.specs);
+  const rules = (xs: string[]) => (xs.length ? xs.join(', ') : 'none');
+  const apply = () => {
+    for (const sp of option.specs) { const r = fix(sp); if (r && !r.ok) { setErr(r.message); return; } }
+    onDone();
+  };
+  return (
+    <div className="fixpreview" role="group" aria-label={'Preview: ' + option.label}>
+      <div className="fixhead">Preview. Nothing has changed yet</div>
+      {pv.ok ? (
+        <>
+          <table className="previewtable">
+            <thead><tr><th>What</th><th>Before</th><th>After</th></tr></thead>
+            <tbody>{pv.rows.map((r, i) => <tr key={i}><td>{r.scope + ' · ' + r.field}</td><td className="was">{String(r.from)}</td><td className="now">{String(r.to)}</td></tr>)}</tbody>
+          </table>
+          <p className="note">{'Checks after this change: ' + pv.after.red + ' red, ' + pv.after.amber + ' amber (now ' + pv.before.red + ' red, ' + pv.before.amber + ' amber). ' + (pv.fixed.length ? 'Fixed: ' + rules(pv.fixed) + '.' : 'No rule would be fixed by this.')}</p>
+          {pv.price.before !== pv.price.after ? <p className="note">{'Price: ' + money(pv.price.before) + ' → ' + money(pv.price.after) + '.'}</p> : null}
+          {pv.newProblems.length ? <p className="fixerr" role="alert">{'This would also open: ' + rules(pv.newProblems) + '. You can fix that afterwards, or choose another option.'}</p> : null}
+        </>
+      ) : <p className="fixerr" role="alert">{pv.message}</p>}
+      {err ? <p className="fixerr" role="alert">{err}</p> : null}
+      <div className="fixrow">
+        <button type="button" className="btn small" disabled={!pv.ok} onClick={apply}>Apply fix</button>
+        <button type="button" className="btn small ghost" onClick={onDone}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 export function QuickFix({ issue, b, ev, fix }: { issue: any; b: any; ev: any; fix: Fix }) {
   const s = suggestions(b), rec = ev.rec, rule = issue.rule as string;
   const items: any[] = b.items || [];
+  const [pend, setPend] = useState<FixOption | null>(null);
+  const options = fixOptions(b, ev, issue);
   // Rows this issue is about. Item-level issues carry the SKU; fall back to rows with no SKU.
   const rows = (pred: (it: any) => boolean) => items.map((_, i) => i).filter(i => (issue.item ? items[i].sku === issue.item : !items[i].sku) && pred(items[i]));
   const name = (it: any) => it.sku || it.desc || 'this item';
@@ -89,54 +124,21 @@ export function QuickFix({ issue, b, ev, fix }: { issue: any; b: any; ev: any; f
         onApply={t => fix({ kind: 'set', field: 'hs', value: t.replace(/[\s.]/g, ''), itemIndex: i, rule })} />
     ));
   } else if (rule === 'R-02') {
-    body = (<>
-      <Btn onClick={() => fix({ kind: 'set', field: 'declaredValue', value: s.itemsValue, rule })}>{'Set declared value to ' + gbp(s.itemsValue) + ' (what the items add up to)'}</Btn>
-      <NumField field="declaredValue" label="Or enter the correct declared value (£)" cta="Set value" step="0.01" onApply={n => fix({ kind: 'set', field: 'declaredValue', value: n, rule })} />
-    </>);
-  } else if (rule === 'R-03') {
-    body = rows(it => itemFlags(it).cartonMath).map(i => {
-      const it = items[i], whole = it.upc > 0 && Number.isInteger(it.qty / it.upc);
-      return (
-        <div key={i} className="fixrow">
-          {whole ? <Btn onClick={() => fix({ kind: 'set', field: 'cartons', value: it.qty / it.upc, itemIndex: i, rule })}>{'Set cartons to ' + it.qty / it.upc + ' (quantity ÷ per carton)'}</Btn> : null}
-          <Btn ghost onClick={() => fix({ kind: 'set', field: 'qty', value: it.upc * it.cartons, itemIndex: i, rule })}>{'Set quantity to ' + (it.upc * it.cartons).toLocaleString('en-GB') + ' (per carton × cartons)'}</Btn>
-        </div>
-      );
-    });
-  } else if (rule === 'R-04') {
-    body = <Btn onClick={() => fix({ kind: 'set', field: 'cartons', value: s.itemsCartons, rule })}>{'Set total cartons to ' + s.itemsCartons + ' (what the items add up to)'}</Btn>;
+    body = <NumField field="declaredValue" label="Or enter the correct declared value (£)" cta="Set value" step="0.01" onApply={n => fix({ kind: 'set', field: 'declaredValue', value: n, rule })} />;
   } else if (rule === 'R-05') {
-    const sel = rec.selected;
-    body = (<>
-      <div className="fixrow">
-        {!rec.recommended ? rec.options.slice().sort((x: any, y: any) => x.minCost - y.minCost).map((o: any) => (
-          <Btn key={o.carrier} ghost={o !== rec.options.slice().sort((x: any, y: any) => x.minCost - y.minCost)[0]} onClick={() => { fix({ kind: 'carrier', carrier: o.carrier, rule }); fix({ kind: 'set', field: 'pallets', value: o.minPallets, rule }); }}>{'Use ' + o.minPallets + ' pallets with ' + o.carrier + ' (' + gbp(o.minCost) + ')'}</Btn>
-        )) : null}
-        {rec.recommended && rec.recommended.carrier !== sel.carrier ? <Btn onClick={() => fix({ kind: 'carrier', carrier: rec.recommended.carrier, rule })}>{'Switch to ' + rec.recommended.carrier + ' (' + gbp(rec.recommended.price * rec.pallets) + ')'}</Btn> : null}
-        {rec.recommended && sel.minPallets && sel.minPallets !== b.pallets ? <Btn ghost onClick={() => fix({ kind: 'set', field: 'pallets', value: sel.minPallets, rule })}>{'Use ' + sel.minPallets + ' pallets with ' + sel.carrier + ' (' + gbp(sel.minCost) + ')'}</Btn> : null}
-      </div>
-      <NumField field="pallets" label="Or set the number of pallets" cta="Set pallets" step="1" onApply={n => fix({ kind: 'set', field: 'pallets', value: Math.round(n), rule })} />
-    </>);
+    body = <NumField field="pallets" label="Or set the number of pallets" cta="Set pallets" step="1" onApply={n => fix({ kind: 'set', field: 'pallets', value: Math.round(n), rule })} />;
   } else if (rule === 'R-06') {
-    body = (<>
-      {rows(it => !!PF.hazardOf(it)).map(i => (
-        <Btn key={i} onClick={() => fix({ kind: 'remove', itemIndex: i, rule })}>{'Remove ' + name(items[i]) + ' from this shipment'}</Btn>
-      ))}
-      <p className="note">Restricted goods can’t travel on this service. If a description is wrong, correct it in your own system and upload the file again.</p>
-    </>);
+    body = <p className="note">Restricted goods can’t travel on this service. Removing the item is the only fix here. If a description is wrong, correct it in your own system and upload the file again.</p>;
   } else if (rule === 'R-07') {
-    body = <NumField field="grossWeight" label="Correct total gross weight (kg)" hint={'at least ' + s.itemsWeight + ' kg, plus packaging and pallets'} cta="Set weight" step="0.1" onApply={n => fix({ kind: 'set', field: 'grossWeight', value: n, rule })} />;
+    body = <NumField field="grossWeight" label="Or enter the correct total gross weight (kg)" hint={'at least ' + s.itemsWeight + ' kg, plus packaging and pallets'} cta="Set weight" step="0.1" onApply={n => fix({ kind: 'set', field: 'grossWeight', value: n, rule })} />;
   } else if (rule === 'R-08') {
-    body = <Btn onClick={() => fix({ kind: 'set', field: 'appointment', value: 'Yes', rule })}>A delivery appointment is booked</Btn>;
+    body = <p className="note">Only you know whether an appointment is booked. Book it with the warehouse first, then confirm it here.</p>;
   } else if (rule === 'R-09') {
     body = rows(it => itemFlags(it).coo).map(i => (
       <SelectField key={i} label={'Where was ' + name(items[i]) + ' made?'} options={PF.COUNTRIES} cta="Set country" onApply={v => fix({ kind: 'set', field: 'coo', value: v, itemIndex: i, rule })} />
     ));
   } else if (rule === 'R-10') {
-    body = (<>
-      <Btn onClick={() => fix({ kind: 'set', field: 'readyDate', value: PF.todayISO(), rule })}>Collect today</Btn>
-      <DateField onApply={d => fix({ kind: 'set', field: 'readyDate', value: d, rule })} />
-    </>);
+    body = <DateField onApply={d => fix({ kind: 'set', field: 'readyDate', value: d, rule })} />;
   } else if (rule === 'INPUT' && !issue.field) {
     body = <p className="note">Add the Booking ID in your file and upload it again. This row can’t be booked without one.</p>;
   } else if (rule === 'INPUT') {
@@ -150,17 +152,27 @@ export function QuickFix({ issue, b, ev, fix }: { issue: any; b: any; ev: any; f
     if (/Route not supported/.test(t)) body = <SelectField label="Destination city" options={Object.keys(PF.DESTS)} cta="Set destination" onApply={c => fix({ kind: 'route', city: c, rule: 'DATA' })} />;
     else if (/Pallet count/.test(t)) body = <NumField field="pallets" label="Number of pallets" cta="Set pallets" step="1" onApply={n => fix({ kind: 'set', field: 'pallets', value: Math.round(n), rule: 'DATA' })} />;
     else if (/Gross weight missing/.test(t)) body = <NumField field="grossWeight" label="Total gross weight (kg)" hint={'at least ' + s.itemsWeight + ' kg'} cta="Set weight" step="0.1" onApply={n => fix({ kind: 'set', field: 'grossWeight', value: n, rule: 'DATA' })} />;
-    else if (/Declared value missing/.test(t)) body = (<>
-      <Btn onClick={() => fix({ kind: 'set', field: 'declaredValue', value: s.itemsValue, rule: 'DATA' })}>{'Set declared value to ' + gbp(s.itemsValue) + ' (what the items add up to)'}</Btn>
-      <NumField field="declaredValue" label="Or enter it (£)" cta="Set value" step="0.01" onApply={n => fix({ kind: 'set', field: 'declaredValue', value: n, rule: 'DATA' })} />
-    </>);
+    else if (/Declared value missing/.test(t)) body = <NumField field="declaredValue" label="Or enter it (£)" cta="Set value" step="0.01" onApply={n => fix({ kind: 'set', field: 'declaredValue', value: n, rule: 'DATA' })} />;
     else if (/Ready date/.test(t)) body = <DateField onApply={d => fix({ kind: 'set', field: 'readyDate', value: d, rule: 'DATA' })} />;
     else if (/No items found/.test(t)) body = <p className="note">This booking has no product lines. Add them in your own system and upload the file again.</p>;
     else if (/^Missing /.test(t)) body = <p className="note">Fill this in the product table further down this page.</p>;
   }
-  const has = Array.isArray(body) ? body.length > 0 : !!body;
+  const has = options.length > 0 || (Array.isArray(body) ? body.length > 0 : !!body);
   if (!has) return null;
-  return <div className="fixbox"><div className="fixhead">Fix it here</div><div className="fixbody">{body}</div></div>;
+  return (
+    <div className="fixbox">
+      <div className="fixhead">Fix it here</div>
+      <div className="fixbody">
+        {options.length ? (
+          <div className="fixrow" role="group" aria-label="Suggested fixes">
+            {options.map(o => <Btn key={o.id} ghost={o.ghost} onClick={() => setPend(o)}>{o.label}</Btn>)}
+          </div>
+        ) : null}
+        {pend ? <FixPreviewBox b={b} option={pend} fix={fix} onDone={() => setPend(null)} /> : null}
+        {body}
+      </div>
+    </div>
+  );
 }
 
 /* ---------- editable shipment details and product lines ---------- */
