@@ -10,6 +10,10 @@ const { ORIGINS, DESTS, COUNTRIES, PRIORITIES, gbp, nf, dmy, niceDate } = PF;
 
 const WORD = "(?:(?!(?:at|@|for|in|with|packed|priced|each|from|made|to|and|per|every|are|is|of|on|by|please)\\b)[A-Za-z][A-Za-z0-9'\\-]*)";
 const WORDS = '(' + WORD + '(?:\\s+' + WORD + '){0,5})';
+// A product description: "ceramic mugs", "bottles of eau de parfum 50ml". A size such as 50ml or 1 L belongs to the description.
+const SIZE = '(?:\\s+\\d+(?:\\.\\d+)?\\s?(?:ml|cl|l|ltr|litres?|liters?|g|kg|oz|mm|cm|m)\\b)?';
+const WORDS_NC = '(?:' + WORD + '(?:\\s+' + WORD + '){0,5})';
+const DESCX = '(' + WORDS_NC + '(?:\\s+of\\s+' + WORDS_NC + ')?' + SIZE + ')';
 const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
 const NUMW = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 const N = s => parseFloat(String(s).replace(/,/g, ''));
@@ -118,7 +122,7 @@ function extractAll(text, c, askKey, today) {
   const ex = { b: {}, item: {}, rel: [], sets: [], flags: {}, itemTarget: null, carrier: null, intent: null };
   const orig = String(text).replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/\s+/g, ' ').trim();
   if (/^\s*(start over|start a new booking|new booking|reset|clear (?:it|all|everything)|begin again)\b/i.test(orig)) { ex.intent = 'reset'; return ex; }
-  if (/\b(confirm(?: it| the booking| booking)?|book it|go ahead|looks good|proceed|that'?s right, book|lock it in)\b/i.test(orig) && c.started && !askKey) { ex.intent = 'confirm'; }
+  if (/\b(confirm(?: it| the booking| booking)?|book it|go ahead|looks good|proceed|that'?s right, book|lock it in)\b/i.test(orig) && c.started && (!askKey || /^(?:please\s+)?(?:confirm(?: it| the booking| booking)?|book it|book this|go ahead(?: and book)?|proceed)[\s.!]*$/i.test(orig))) { ex.intent = 'confirm'; }
 
   const cm = /\b(?:use|switch to|choose|pick|go with|select|change (?:the )?carrier to|take)\s+carrier\s+([abc])\b/i.exec(orig);
   if (cm) { ex.carrier = 'Carrier ' + cm[1].toUpperCase(); return ex; }
@@ -168,6 +172,15 @@ function extractAll(text, c, askKey, today) {
   let sellerM = /(?:^|[\s,.;])(?:[Ii]'?m|[Ii]\s+am|[Ww]e'?re|[Ww]e\s+are|[Tt]his\s+is|[Ii]t'?s)\s+(?:from\s+|with\s+|at\s+)?([A-Z][A-Za-z0-9&'\-]*(?:\s+(?!I\b|I')[A-Z&][A-Za-z0-9&'\-]*){0,4})/.exec(orig);
   if (!sellerM) sellerM = /(?:seller|company|business|brand|shop)(?:\s+name)?\s*(?:is|:|=|called|named)\s*([A-Z0-9][A-Za-z0-9&'.\- ]{1,40}?)(?=\s*(?:[,.;]|\sand\b|\sto\b|\sfrom\b|$))/i.exec(orig);
   if (!sellerM) sellerM = /\b(?:from|for)\s+([A-Z][A-Za-z0-9&'\-]*(?:\s+(?!I\b|I')[A-Z&][A-Za-z0-9&'\-]*){0,3}\s+(?:Ltd|Limited|Goods|Co|Company|Trading|Supplies|Exports|Imports|LLP|plc|Foods|Home|Textiles|Hardware|Designs|Studio))\b/.exec(orig);
+  if (!sellerM && !c.b.seller) {
+    // "Iron Co, 200 skillets…", "Hexa Gadgets here, …": a capitalised name at the very start, then "here" or a comma.
+    const op = /^(?:(?:hi|hello|hey)[\s,!.]+)?([A-Z][A-Za-z0-9&'\-]*(?:\s+(?!I\b|I')[A-Z&][A-Za-z0-9&'\-]*){0,4})(?:\s+here\b\s*[,.:;–-]?|\s*[,:;–-])\s*/.exec(orig);
+    if (op) {
+      const nm = op[1].trim(), low = nm.toLowerCase();
+      const places = ORIGINS.concat(Object.keys(DESTS), ['Germany', 'France', 'Netherlands', 'Holland', 'Warehouse', 'Business', 'Carrier', 'Hello', 'Hi', 'Hey', 'Thanks', 'Yes', 'No', 'Sorry', 'Actually', 'Please', 'Also', 'Sending', 'Shipping', 'Looking', 'Booking', 'Cheapest', 'Fastest', 'Balanced']);
+      if (!places.some(x => x.toLowerCase() === low) && !/^(?:the|a|an|we|i|my|our|it|this|that|add|make|change|use|set|book|confirm)\b/i.test(nm)) sellerM = [op[0], nm];
+    }
+  }
   if (sellerM && !ORIGINS.concat(Object.keys(DESTS)).some(x => x.toLowerCase() === sellerM[1].toLowerCase()) && !/^(Sending|Shipping|Looking|Booking)/i.test(sellerM[1])) ex.b.seller = sellerM[1].trim().replace(/\s+(?:and|to|from|in)$/i, '');
 
   // cities and countries
@@ -200,10 +213,21 @@ function extractAll(text, c, askKey, today) {
     || take(/(?:at|@|priced\s+at|unit\s+price(?:\s+(?:is|of))?|price\s+(?:is|of)|costs?)\s*£\s*([\d,]*\.?\d+)/i)
     || take(/([\d,]*\.?\d+)\s*(?:pounds|quid|gbp)\s*(?:each|per\s+\w+)/i);
   if (v) ex.item.price = N(v);
+  // A bare amount ("£5,400", "5400 pounds", "£5.4k") is the declared value once the unit prices are known or we are asking for the totals.
+  // Only an amount with "each"/"per" (taken above) is a unit price.
+  const lastItem = c.b.items[c.b.items.length - 1];
+  const pricesKnown = ex.item.price != null || (c.b.items.length > 0 && c.b.items.every(i => i.price != null));
+  if (ex.b.declaredValue == null && (askKey === 'totals' || pricesKnown)) {
+    const bm = /£\s*(\d[\d,]*(?:\.\d+)?)\s*(k\b)?|(?<![\d.,])(\d[\d,]*(?:\.\d+)?)\s*(k\b)?\s*(?:pounds|quid|gbp)\b/i.exec(t);
+    if (bm) { const raw = bm[1] || bm[3]; const mult = (bm[2] || bm[4]) ? 1000 : 1; ex.b.declaredValue = Math.round(N(raw) * mult * 100) / 100; t = t.slice(0, bm.index) + ' ' + t.slice(bm.index + bm[0].length); }
+  }
 
   // weights
-  v = take(/([\d.]+)\s*(?:kg|kgs|kilos?|kilograms?)\s*(?:each|per\s+\w+|a\s+(?:unit|piece|item)|apiece)/i)
-    || take(/(?:each|per\s+(?:unit|piece|item))\s+(?:weighs|weighing|is|at)?\s*([\d.]+)\s*(?:kg|kgs|kilos?)/i)
+  const grams = take(/(?:(?:each|per\s+(?:unit|piece|item))(?:\s+one)?\s+(?:weighs?|weighing|is|at)?|weighs?|weighing|(?:unit\s+)?weight\s+(?:is|of))\s*([\d.]+)\s*(?:g|gr|grams?)\b/i)
+    || take(/(?<![\d.])([\d.]+)\s*(?:g|gr|grams?)\s*(?:each|per\s+(?:unit|piece|item|bottle|jar|pack)|apiece)/i);
+  v = grams ? N(grams) / 1000 : null;
+  if (v == null) v = take(/([\d.]+)\s*(?:kg|kgs|kilos?|kilograms?)\s*(?:each|per\s+\w+|a\s+(?:unit|piece|item)|apiece)/i)
+    || take(/(?:each|per\s+(?:unit|piece|item))(?:\s+one)?\s+(?:weighs|weighing|is|at)?\s*([\d.]+)\s*(?:kg|kgs|kilos?)/i)
     || take(/unit\s+weight\s*(?:is|of|:|=)?\s*([\d.]+)/i)
     || take(/(?:weighs|weighing|weight\s+of)\s+([\d.]+)\s*(?:kg|kgs|kilos?)\s+each/i);
   if (v) ex.item.unitWeight = N(v);
@@ -228,7 +252,7 @@ function extractAll(text, c, askKey, today) {
   if (v) ex.b.cartons = N(v);
 
   // HS code
-  v = take(/(?:hs(?:\s*code)?|tariff(?:\s*code)?|commodity\s*code)\s*(?:is|of|:|=|#)?\s*(\d[\d.\s]{3,13}\d)/i);
+  v = take(/(?:hs(?:\s*code)?|tariff(?:\s*code)?|commodity\s*code)\s*(?:is|of|:|=|#)?\s*(\d[\d.\s]{2,13}\d)/i);
   if (v) ex.item.hs = v.replace(/[\s.]/g, '');
 
   // product and quantity
@@ -236,7 +260,7 @@ function extractAll(text, c, askKey, today) {
   if (wantItem) {
     const q1 = take(/(?:quantity|qty)\s*(?:is|of|:|=)?\s*(\d[\d,]*)/i);
     if (q1) ex.item.qty = N(q1);
-    const re = new RegExp("(?:^|[^\\d.£\\-/])(\\d[\\d,]{0,8})\\s*(?:x\\s+|units?\\s+of\\s+|pcs\\s+of\\s+|pieces?\\s+of\\s+|of\\s+)?" + WORDS, 'i');
+    const re = new RegExp("(?:^|[^\\d.£\\-/])(\\d[\\d,]{0,8})\\s*(?:x\\s+|units?\\s+of\\s+|pcs\\s+of\\s+|pieces?\\s+of\\s+|of\\s+)?" + DESCX, 'i');
     const m = re.exec(t);
     if (m && !/^(?:units?|pcs|pieces?|items?|gbp|pounds|per|kg|kgs)$/i.test(m[2].split(/\s+/)[0])) {
       if (ex.item.qty == null) ex.item.qty = N(m[1]);
@@ -245,7 +269,7 @@ function extractAll(text, c, askKey, today) {
     } else if (m && ex.item.qty == null && /^(?:units?|pcs|pieces?|items?)$/i.test(m[2].split(/\s+/)[0])) { ex.item.qty = N(m[1]); }
     if (!ex.item.desc && ofDesc) ex.item.desc = ofDesc;
     if (!ex.item.desc) {
-      const sd = new RegExp('(?:sending|shipping|exporting|moving|selling)\\s+(?:some\\s+|our\\s+|a\\s+load\\s+of\\s+)?' + WORDS, 'i').exec(orig);
+      const sd = new RegExp('(?:sending|shipping|exporting|moving|selling)\\s+(?:some\\s+|our\\s+|a\\s+load\\s+of\\s+)?' + DESCX, 'i').exec(orig);
       if (sd && !/^(?:a|the|my|our)?\s*(?:shipment|booking|pallets?|cartons?|order|freight|delivery|load|consignment|goods|stock|products?)\b/i.test(sd[1])) ex.item.desc = sd[1].trim();
     }
     if (!ex.item.desc && askKey === 'item.product') {

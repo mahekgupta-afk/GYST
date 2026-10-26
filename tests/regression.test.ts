@@ -64,11 +64,12 @@ describe('1. dates (A1, B2)', () => {
 });
 
 describe('2-3. carrier recommendation and R-05 (A2, A5)', () => {
-  it('UK→Germany, Cheapest, 2 pallets, 1,500 kg → Carrier B £440, R-05 passes, note explains why A was ruled out', () => {
+  it('UK→Germany, Cheapest, 2 pallets, 1,500 kg → R-05 is Red against Carrier A (the Cheapest pick) and Carrier B £440 is what to switch to; the note explains why A was ruled out', () => {
     const e = ev(booking());
     expect(e.rec.recommended.carrier).toBe('Carrier B');
     expect(e.rec.recommended.price * e.rec.pallets).toBe(440);
-    expect(rules(booking())).not.toContain('R-05');
+    expect(rules(booking())).toContain('R-05');
+    expect(rules(booking({ _carrier: 'Carrier B' }))).not.toContain('R-05');      // once the seller takes the switch, it passes
     const note = e.rec.ruledOutNotes[0];
     expect(note).toContain('Carrier A (cheapest per pallet) was ruled out');
     expect(note).toContain('750 kg per pallet exceeds its 500 kg limit');
@@ -90,6 +91,8 @@ describe('2-3. carrier recommendation and R-05 (A2, A5)', () => {
     expect(i.fix).toContain('Carrier C needs 10 pallets (£3,300');
     expect(i.fix).toContain('Carrier A needs 8 pallets (£1,360');
     expect(i.fix).toContain('Carrier B needs 6 pallets (£1,260');
+    expect(i.fix).toContain('Switching carrier cannot fix this');
+    expect(i.autofix.label).toBe('Use 6 pallets with Carrier B');
   });
   it('exactly at the limit passes, one kg over is ruled out', () => {
     expect(ev(booking({ pallets: 1, grossWeight: 500 })).rec.options.find((o: any) => o.carrier === 'Carrier A').eligible).toBe(true);
@@ -110,13 +113,13 @@ describe('2-3. carrier recommendation and R-05 (A2, A5)', () => {
     const tie = PF.rankBy([{ carrier: 'Carrier B', price: 100, transit: 3, ontime: 90 }, { carrier: 'Carrier A', price: 100, transit: 3, ontime: 90 }], 'Cheapest');
     expect(tie.map((o: any) => o.carrier)).toEqual(['Carrier A', 'Carrier B']);
   });
-  it('Balanced: documented min-max score over feasible carriers, equal thirds, with numbers in the reason', () => {
+  it('Balanced: min-max score over feasible carriers, weights cost 40% / speed 30% / reliability 30%, with numbers in the reason', () => {
     const e = ev(booking({ priority: 'Balanced', pallets: 3, grossWeight: 300 }));
-    // price 340/220/180, days 2/3/5, on-time 98/95/92: C = (0+1+1)/3, B = (.75+.667+.5)/3, A = (1+0+0)/3
-    expect(e.rec.recommended.carrier).toBe('Carrier C');
-    expect(e.rec.reason).toContain('£340 a pallet, 2 days, 98% on time');
-    expect(e.rec.reason).toContain('weights the three equally');
-    expect(e.rec.reason).toMatch(/Scores: C 0\.67, B 0\.64, A 0\.33/);
+    // price 340/220/180, days 2/3/5, on-time 98/95/92: C = 0 + .3 + .3 = .60, B = .4*.75 + .3*.667 + .3*.5 = .65, A = .4 + 0 + 0 = .40
+    expect(e.rec.recommended.carrier).toBe('Carrier B');
+    expect(e.rec.reason).toContain('£220 a pallet, 3 days, 95% on time');
+    expect(e.rec.reason).toContain('cost 40%, speed 30%, reliability 30%');
+    expect(e.rec.reason).toMatch(/Scores: B 0\.65, C 0\.60, A 0\.40/);
     expect(e.rec.reason).toContain('The others lost');
   });
   it('Balanced only compares carriers that can take the load', () => {
@@ -169,15 +172,14 @@ describe('4-6. R-02, R-03, R-04 (B3, B6)', () => {
 describe('6-7. chat scope, SKU and currency (A3, A4)', () => {
   it('"Ship 4 pallets of gel to Madrid" is refused in the same reply and Madrid is not stored', () => {
     const { c, log } = chat('Ship 4 pallets of gel to Madrid');
-    expect(log.scope.join(' ')).toContain('I can’t deliver to Madrid');
-    expect(log.scope.join(' ')).toContain('London, Manchester, Birmingham and Leeds');
+    expect(log.scope.join(' ')).toContain('Sorry, I can’t book Madrid');
     expect(log.scope.join(' ')).toContain('Amsterdam, Rotterdam');
     expect(c.b.destCity).toBeNull();
     expect(c.b.destCountry).toBeNull();
     expect(c.b.pallets).toBe(4);
   });
   it('unsupported origin, mismatched city and country, city only, country only, misspellings', () => {
-    expect(chat('Collect 4 pallets from Glasgow to Paris').log.scope.join(' ')).toContain('I can’t collect from Glasgow');
+    expect(chat('Collect 4 pallets from Glasgow to Paris').log.scope.join(' ')).toContain('Sorry, I can’t book Glasgow');
     expect(chat('Collect 4 pallets from Glasgow to Paris').c.b.originCity).toBeNull();
     const mm = chat('Deliver to Lyon, Germany');
     expect(mm.log.scope.join(' ')).toContain('Lyon is in France, not Germany');
@@ -230,8 +232,10 @@ describe('8. R-01 HS codes (B4)', () => {
   });
   it('a 5-digit numeric code mentions a dropped leading zero', () => {
     const i = issue(booking({ items: [item({ hs: 90111 })] }), 'R-01');
-    expect(i.what).toMatch(/leading zero/);
+    expect(i.title).toMatch(/leading zero/);
+    expect(i.what).toContain('090111');
     expect(i.fix).toMatch(/text/);
+    expect(i.autofix).toEqual({ label: 'Use 090111', item: 0, set: { hs: '090111' } });
   });
 });
 
@@ -239,13 +243,13 @@ describe('9. R-06 restricted goods (B7)', () => {
   const flagged = (d: string) => !!PF.hazardOf({ desc: d, sku: '' });
   it.each(['Power bank (lithium battery)', 'Deodorant spray', 'Alcohol-based hand sanitiser gel', 'Li-Po battery pack', 'LiFePO4 cell', 'Lithium-ion torch',
     'Butane gas canister', 'Spray can of paint', 'Pressurised container', 'Lighter fluid', 'White spirit 1L', 'Acetone nail polish remover', 'Ethanol-based sanitizer', 'Perfume 50ml',
-    'Aftershave balm', 'Box of matches', 'Cigarette lighters', 'Gadget, batteries not included', 'Hairspray aerosol'])('flags "%s"', d => expect(flagged(d)).toBe(true));
+    'Aftershave balm', 'Box of matches', 'Cigarette lighters', 'Hairspray aerosol'])('flags "%s"', d => expect(flagged(d)).toBe(true));
   it.each(['Battery-free phone stand', 'Lithium soap bar', 'Non-aerosol spray bottle', 'Scented candle', 'Ceramic mug', 'Olive oil 500 ml', 'Lighter weight cotton shirt', 'Alcohol-free wipes',
-    'Phone case, no battery', 'Torch without batteries'])('does not flag "%s"', d => expect(flagged(d)).toBe(false));
+    'Phone case, no battery', 'Torch without batteries', 'Gadget, batteries not included', 'Battery-operated fairy lights (batteries not included)'])('does not flag "%s"', d => expect(flagged(d)).toBe(false));
   it('shows which word triggered the flag, with the fix', () => {
     const i = issue(booking({ items: [item({ desc: 'Power bank (lithium battery)' })] }), 'R-06');
-    expect(i.what).toMatch(/matched “/);
-    expect(i.fix).toMatch(/correct the description/);
+    expect(i.what).toMatch(/from “lithium” in the description/);
+    expect(i.fix).toMatch(/Remove this item from the booking/);
   });
 });
 
@@ -426,7 +430,7 @@ describe('13. start over and booking while Red remains (C4, C5)', () => {
     expect(r.problems.join(' ')).toMatch(/Declared value/);
   });
   it('warnings must each be acknowledged before the server will book', () => {
-    const b = booking({ destType: 'Warehouse', appointment: 'No', declaredValue: 100 });
+    const b = booking({ destType: 'Warehouse', appointment: 'No', declaredValue: 100, _carrier: 'Carrier B' });
     expect(rules(b)).toEqual(['R-08']);
     expect(ev(b).status).toBe('warning');
     expect((checkBooking(b) as any).error).toBe('warnings_not_acknowledged');

@@ -52,12 +52,12 @@ describe('compare carriers', () => {
     expect(text(row('Carrier A'))).not.toContain('Recommended');
     expect(screen.getByText(/Lowest total price/)).toBeTruthy();
   });
-  it('Germany, 4 pallets, 1,500 kg, Balanced: all fit, scores C 0.67, B 0.64, A 0.33, C is recommended', () => {
+  it('Germany, 4 pallets, 1,500 kg, Balanced: all fit, scores B 0.65, C 0.60, A 0.40, B is recommended', () => {
     render(<CarrierOptions onUse={() => {}} />);
     fill('Germany', '4', '1500', 'Balanced');
     for (const c of ['Carrier A', 'Carrier B', 'Carrier C']) expect(text(row(c))).toMatch(/Fits, \d+ kg spare/);
-    expect(text(row('Carrier C'))).toContain('Recommended');
-    expect(screen.getByText(/Balanced scores/).textContent).toContain('C 0.67, B 0.64, A 0.33');
+    expect(text(row('Carrier B'))).toContain('Recommended');
+    expect(screen.getByText(/Balanced scores/).textContent).toContain('B 0.65, C 0.60, A 0.40');
   });
   it('shows the winner for every priority', () => {
     render(<CarrierOptions onUse={() => {}} />);
@@ -66,7 +66,7 @@ describe('compare carriers', () => {
     expect(w).toContain('Cheapest Carrier A');
     expect(w).toContain('Fastest Carrier C');
     expect(w).toContain('Most reliable Carrier C');
-    expect(w).toContain('Balanced Carrier C');
+    expect(w).toContain('Balanced Carrier B');
   });
   it('France, 4 pallets, 4,000 kg: none fit; B needs 6 pallets (£1,260), A 8 (£1,360), C 10 (£3,300)', () => {
     render(<CarrierOptions onUse={() => {}} />);

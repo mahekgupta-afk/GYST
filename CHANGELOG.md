@@ -2,6 +2,19 @@
 
 The ten rules (R-01 to R-10), their Red/Amber severities and the carrier rate card are unchanged. Checks stay deterministic code. Where an item says "proved by", the named test or manual check is what shows it works.
 
+## Judging fixes (26 Oct 2026)
+
+These supersede A2 (R-05 against the recommendation) and A5 (equal-weight Balanced) below.
+
+1. **Chat completes a booking.** A bare amount ("£5,400", "5400 pounds", "£5.4k") is the declared value once unit prices are known or totals are being asked for; only "each"/"per"/"at" makes it a unit price. "350 g" and "each one weighs 350 g" are 0.35 kg. "240 bottles of eau de parfum 50ml" keeps the whole description. "HS 8518" is stored and flagged by R-01. Openers such as "Hexa Gadgets here, …" and "Tiny Co, 100 candles…" set the seller. Unsupported places get "Sorry, I can't book Madrid (we deliver to …)". "Confirm" while details are missing says what is still needed. After every change the reply starts "Checks re-run: 1 red, 0 amber (was 0 and 0). Carrier A → Carrier C, £540 → £680." The reply text now lives in `lib/chatReply.ts`, shared by the page and the tests.
+2. **/api/parse-message.** The AI call is cut off after 4 s with an AbortController and asked to think minimally. The first failure prints the real error once and switches the AI off for 5 minutes: `GET` returns `{"enabled": false}`, `POST` answers 503 at once, and the page quietly uses the built-in parser. The engine never depends on the AI.
+3. **R-05 against the priority pick.** Red against the carrier the priority would choose ignoring weight ("620 kg per pallet; Carrier A (cheapest) takes max 500 kg."), with two priced one-click fixes (switch carrier, or N pallets with the same carrier) and which is cheaper. If nothing fits, it says switching cannot fix it and gives the cheapest re-palletising option.
+4. **Balanced** is cost 40%, speed 30%, reliability 30% (min-max over the carriers that can take the load).
+5. **R-06** uses the reference hazard detector: lithium devices without the word "battery", aerosols, flammables and spirits are flagged, one finding per item with "Remove this item"; the listed safe-wording items are not.
+6. **Uploads.** HS 90240 gets "probably 090240" and a one-click "Use 090240". Dates: real dates, serials, DD-MM-YYYY and "10th Nov 2026" / "Dec 9, 2026" text, day-first, impossible dates (31-11-2026) invalid; a past date that would be future month-first says so in R-10. Note and TOTAL rows are skipped with a notice. Duplicate IDs are held; IDs differing in case, spacing or hyphen still attach. Cities and countries outside the lists, and unknown destination types, priorities and appointment values, give "Data" messages and are never ready to book.
+
+Tests: `tests/answer-key.test.ts` (the test pack's Answer key, today = 2026-10-26), `tests/chat-scripts.test.ts` (five chat scripts plus parser details, AI off), `tests/messy-dataset.test.ts`, `tests/judging-fixes.test.ts`, `tests/parse-message-route.test.ts`.
+
 ## A. Confirmed bugs from live testing
 
 **A1. Relative dates.** Cause: the Gemini path let the model supply `readyDate`, and it returned today's date for "tomorrow". Fix: dates are never taken from the model. A new typed module, `lib/parse/dates.ts`, resolves dates from the text and the browser's local today: today, tomorrow, day after tomorrow, "in N days/weeks", "next Monday", "this Friday", "5 Nov", "5th November", "05/11/2026". Numeric dates are always day first. Vague phrases ("next week", "end of the month", "asap") are not saved; the seller is asked for an exact date. The resolved date is echoed as DD-MM-YYYY. A ready date equal to today passes R-10. Proved by: `tests/regression.test.ts` section 1 (clock mocked to 26-10-2026) and a live check in the browser with Gemini on ("ready date tomorrow" became 27-10-2026).

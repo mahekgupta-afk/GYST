@@ -18,25 +18,57 @@ const ai = () => (client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KE
 // Quota, overload and "model gone" errors are worth trying the next model for.
 const SKIPPABLE = /"code":\s*(429|503|504|404)|UNAVAILABLE|RESOURCE_EXHAUSTED|DEADLINE_EXCEEDED|aborted|timed? ?out/i;
 
-/** Ask Gemini for a JSON reply. Returns the raw text; callers validate it. */
+export const TEXT_TIMEOUT_MS = 4000;
+
+// Health of the text reader. After a failure the built-in parser carries on alone for a while, so a broken key or model costs
+// the seller nothing: GET /api/parse-message reports enabled:false and POST answers at once instead of waiting.
+const COOLDOWN_MS = 5 * 60 * 1000;
+let downUntil = 0, reported = false;
+export const geminiHealthy = () => Date.now() >= downUntil;
+/** Print the real error the first time only; later failures are counted silently. */
+function noteFailure(e: unknown) {
+  downUntil = Date.now() + COOLDOWN_MS;
+  if (reported) return;
+  reported = true;
+  console.error('[parse-message] Gemini call failed, using the built-in parser for the next 5 minutes. Real error:', e instanceof Error ? (e.stack || e.message).slice(0, 800) : e);
+}
+export function noteSuccess() { downUntil = 0; }
+
+/**
+ * Ask Gemini for a JSON reply, giving up after 4 s in total (one AbortController covers every model tried). Returns the raw text;
+ * callers validate it. Any failure is logged once and re-thrown so the route can fall back to the built-in parser.
+ */
 export async function askJson(prompt: string): Promise<string> {
-  let last: unknown;
-  const started = Date.now();
-  for (const model of MODELS()) {
-    if (Date.now() - started > 8000) break;     // total budget: the browser gives up after 14 s
-    try {
-      const res = await ai().models.generateContent({
-        model,
-        contents: prompt,
-        config: { responseMimeType: 'application/json', temperature: 0, httpOptions: { timeout: 12000 } },
-      });
-      return res.text ?? '';
-    } catch (e) {
-      last = e;
-      if (!SKIPPABLE.test(e instanceof Error ? e.message : '')) throw e;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TEXT_TIMEOUT_MS);
+  const call = (model: string, quick: boolean) => ai().models.generateContent({
+    model,
+    contents: prompt,
+    config: { responseMimeType: 'application/json', temperature: 0, abortSignal: ctl.signal, httpOptions: { timeout: TEXT_TIMEOUT_MS }, ...(quick ? { thinkingConfig: { thinkingLevel: 'minimal' as any } } : {}) },
+  });
+  let last: unknown = new Error('no_model');
+  try {
+    for (const model of MODELS()) {
+      if (ctl.signal.aborted) break;
+      try {
+        let res;
+        try { res = await call(model, true); }
+        catch (e) { if (!ctl.signal.aborted && /INVALID_ARGUMENT|thinking/i.test(e instanceof Error ? e.message : '')) res = await call(model, false); else throw e; }
+        if (!res.text || !res.text.trim()) throw new Error('empty reply');
+        noteSuccess();
+        return res.text;
+      } catch (e) {
+        last = e;
+        if (ctl.signal.aborted || !SKIPPABLE.test(e instanceof Error ? e.message : '')) break;
+      }
     }
+    throw ctl.signal.aborted ? new Error('timed out after ' + TEXT_TIMEOUT_MS + ' ms (last error: ' + (last instanceof Error ? last.message : last) + ')') : last;
+  } catch (e) {
+    noteFailure(e);
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  throw last;
 }
 
 /**

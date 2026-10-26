@@ -1,0 +1,39 @@
+WARNINGS
+Bookings sheet, row 26 (“NOTES: RATES AGREED WITH DAVE ON THE PHO…”) is a note or total, not a booking, so it was skipped.
+Bookings sheet, row 38 (“TOTAL”) is a note or total, not a booking, so it was skipped.
+Booking ID “BK-325” appears 2 times in the Bookings sheet (rows 30, 31). Each copy is flagged, and its items are linked to the first one.
+Items listed for “BK-399” (Items sheet, row 59) have no matching booking, so they were ignored.
+
+BK-001  clear   READY 
+BK-301  blocked       DATA:Delivery city not supported | DATA:Destination type not recognised | DATA:Seller priority not recognised | INPUT:Input error: Pallets | INPUT:Input error: Cartons
+BK-302  blocked       INPUT:Input error: Quantity (units) (MUG-01) | R-05:Pallets too heavy for every carrier on this route
+BK-303  warning       R-10:Ready date is in the past
+BK-304  blocked       R-01:HS code lost its leading zero | R-01:HS code too short
+BK-305  blocked       R-02:Declared value doesn’t match the items
+BK-306  blocked       R-02:Declared value doesn’t match the items
+BK-307  clear   READY 
+BK-308  blocked       R-03:Carton maths doesn’t add up
+BK-309  blocked       R-02:Declared value doesn’t match the items | R-04:Total cartons don’t match the items | R-07:Gross weight is lower than the goods alone
+BK-310  blocked       INPUT:Input error: Pallets
+BK-311  blocked       R-05:Pallets too heavy for every carrier on this route
+BK-312  blocked       R-06:Lithium battery goods
+BK-313  blocked       R-06:Flammable liquid | R-06:Flammable liquid
+BK-314  clear   READY 
+BK-315  warning       R-07:Gross weight is lower than the goods alone
+BK-316  warning       R-07:Gross weight is lower than the goods alone
+BK-317  blocked       DATA:Destination type not recognised | DATA:Delivery appointment not recognised
+BK-318  blocked       DATA:Destination type not recognised
+BK-319  warning       R-09:Country of origin missing
+BK-320  warning       R-10:Ready date is in the past
+BK-321  clear   READY 
+BK-322  blocked       DATA:Ready date missing or unreadable
+BK-323  blocked       DATA:Seller priority not recognised | INPUT:Input error: Cartons | INPUT:Input error: Total declared value | DATA:Ready date missing or unreadable | R-01:HS code isn’t a number | R-01:HS code too shor
+BK-324  clear   READY 
+BK-325  blocked       DATA:Duplicate Booking ID | R-02:Declared value doesn’t match the items | R-04:Total cartons don’t match the items | R-07:Gross weight is lower than the goods alone
+BK-325  blocked       DATA:Duplicate Booking ID
+BK-327  blocked       DATA:Collection city not supported | DATA:Delivery city not supported
+BK-328  blocked       DATA:Seller priority not recognised | INPUT:Input error: Pallets
+BK-329  blocked       DATA:Delivery city and country don’t match
+BK-330  blocked       INPUT:Input error: Pallets | INPUT:Input error: Total gross weight (kg)
+BK-331  blocked       R-01:HS code isn’t a number | R-01:HS code isn’t a number
+BK-332  blocked       INPUT:Input error: Total declared value

@@ -7,6 +7,8 @@ export const DEST_COUNTRY: Record<string, string> = {
 };
 const SUPPORTED_COUNTRIES = ['Germany', 'France', 'Netherlands'];
 
+export const COLLECT_TEXT = 'we collect from London, Manchester, Birmingham and Leeds';
+export const DELIVER_TEXT = 'we deliver to Germany (Berlin, Frankfurt, Hamburg), France (Paris, Lyon) and the Netherlands (Amsterdam, Rotterdam)';
 export const SUPPORTED_TEXT =
   'I collect from London, Manchester, Birmingham and Leeds, and deliver to Germany (Berlin, Frankfurt, Hamburg), France (Paris, Lyon) and the Netherlands (Amsterdam, Rotterdam).';
 
@@ -89,8 +91,8 @@ export function checkScope(raw: string): Scope {
         else side = asOrigin ? 'origin' : asDest ? 'dest' : capital ? 'dest' : null;
         if (!side || flagged.has(n)) continue;
         flagged.add(n);
-        if (side === 'origin') { out.blockOrigin = true; say(`I can’t collect from ${cap(n)}. ${SUPPORTED_TEXT}`); }
-        else { out.blockDest = true; say(`I can’t deliver to ${cap(n)}. ${SUPPORTED_TEXT}`); }
+        if (side === 'origin') { out.blockOrigin = true; say(`Sorry, I can’t book ${cap(n)} (${COLLECT_TEXT}).`); }
+        else { out.blockDest = true; say(`Sorry, I can’t book ${cap(n)} (${DELIVER_TEXT}).`); }
       }
     }
   };
@@ -118,8 +120,8 @@ export function checkScope(raw: string): Scope {
     // Unknown capitalised place: only flag it when this role has no supported value (otherwise it is probably a company name).
     const hasSupported = role === 'origin' ? supportedOrigin.length > 0 : (supportedDest.length > 0 || SUPPORTED_COUNTRIES.some(c => wordRe(c).test(text)));
     if (/^[A-Z]/.test(word) && !hasSupported && !out.resolved.destCity) {
-      if (role === 'origin') { out.blockOrigin = true; say(`I can’t collect from ${word}. ${SUPPORTED_TEXT}`); }
-      else { out.blockDest = true; say(`I can’t deliver to ${word}. ${SUPPORTED_TEXT}`); }
+      if (role === 'origin') { out.blockOrigin = true; say(`Sorry, I can’t book ${word} (${COLLECT_TEXT}).`); }
+      else { out.blockDest = true; say(`Sorry, I can’t book ${word} (${DELIVER_TEXT}).`); }
     }
   }
   return out;

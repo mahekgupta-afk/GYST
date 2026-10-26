@@ -33,10 +33,10 @@ describe('server booking gate', () => {
   });
   it('still judges R-05 against the carrier the user chose', () => {
     const b = get('BK-006');
-    expect(checkBooking(b).ok).toBe(true);      // recommended Carrier B can take 500 kg per pallet
-    b._carrier = 'Carrier C';                   // the user picks a carrier that can't (400 kg limit)
+    expect(checkBooking(b).ok).toBe(false);     // 500 kg per pallet on the Fastest pick, Carrier C (400 kg limit): R-05 is Red until a fix is chosen
+    b._carrier = 'Carrier C';                   // choosing that carrier explicitly changes nothing
     expect(checkBooking(b).ok).toBe(false);
-    b._carrier = 'Carrier B';
+    b._carrier = 'Carrier B';                   // Carrier B can take it
     expect(checkBooking(b).ok).toBe(true);
   });
   it('rejects malformed input instead of throwing', () => {

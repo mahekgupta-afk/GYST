@@ -36,9 +36,10 @@ describe('the example data, read by the real parser and rulebook', () => {
     expect(e.counts.red).toBeGreaterThanOrEqual(4);
     for (const r of ['R-01', 'R-02', 'R-03', 'R-06']) expect(rules('EX-003')).toContain(r);
   });
-  it('(d) is a heavy load: the cheapest carrier is ruled out for weight and another is recommended', () => {
+  it('(d) is a heavy load: the cheapest carrier is over its weight limit (R-05 red) and another is recommended', () => {
     const e = ev('EX-004');
-    expect(e.status).toBe('clear');
+    expect(e.status).toBe('blocked');
+    expect(e.issues.map((i: any) => i.rule)).toContain('R-05');
     expect(e.rec.preferred.carrier).toBe('Carrier A');
     expect(e.rec.preferred.eligible).toBe(false);
     expect(e.rec.recommended.carrier).toBe('Carrier B');
@@ -68,7 +69,7 @@ describe('in the app', () => {
   afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
   const nav = () => screen.getByRole('navigation', { name: 'App' });
 
-  it('Try an example shows the banner and four bookings, one of each kind, and Clear example removes it', async () => {
+  it('Try an example shows the banner and four bookings, one of each kind plus the heavy load, and Clear example removes it', async () => {
     render(<App />);
     fireEvent.click(within(nav()).getByRole('button', { name: 'Try an example' }));
     await waitFor(() => expect(screen.getByText(/Example data, not your file/)).toBeTruthy());
@@ -76,9 +77,9 @@ describe('in the app', () => {
     expect(within(nav()).getByRole('button', { name: 'Try an example' }).getAttribute('aria-current')).toBe('true');
     const tile = (n: RegExp) => screen.getByRole('button', { name: n }).textContent;
     expect(tile(/all bookings/)).toContain('4');
-    expect(tile(/red: need fixing/)).toContain('1');
+    expect(tile(/red: need fixing/)).toContain('2');
     expect(tile(/amber: ready/)).toContain('1');
-    expect(tile(/green: clear/)).toContain('2');
+    expect(tile(/green: clear/)).toContain('1');
     for (const id of ['EX-001', 'EX-002', 'EX-003', 'EX-004']) expect(screen.getByRole('link', { name: 'Open ' + id })).toBeTruthy();
     expect(within(screen.getByRole('link', { name: 'Open EX-004' })).getByText(/Carrier B/)).toBeTruthy();
 

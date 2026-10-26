@@ -125,7 +125,7 @@ function CarrierSection({ b, ev, opts }: { b: any; ev: any; opts: Opts }) {
           </tbody>
         </table>
       </div>
-      {rec.priority === 'Balanced' ? <p className="note">Balanced weighs price, speed and reliability equally, across the carriers that can take this load. How it works is in “Rulebook and rate card” at the bottom of the page.</p> : null}
+      {rec.priority === 'Balanced' ? <p className="note">Balanced weighs cost 40%, speed 30% and reliability 30%, across the carriers that can take this load. How it works is in “Rulebook and rate card” at the bottom of the page.</p> : null}
     </div>
   );
 }

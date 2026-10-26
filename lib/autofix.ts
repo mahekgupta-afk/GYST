@@ -1,7 +1,7 @@
 // Suggested fixes for a failed rule, and a safe way to preview them.
 // Nothing here judges a booking: a fix is a list of ordinary corrections (the same `Spec`s the editor already applies),
 // and the unchanged rules engine decides the result. Fixes are offered only where the right answer is unambiguous, or as
-// a short list of choices the user picks from; R-01, R-06 (beyond removing the item), R-08 and R-09 need facts only the user has.
+// a short list of choices the user picks from; R-01 (apart from a lost leading zero), R-06 (beyond removing the item), R-08 and R-09 need facts only the user has.
 import { PF } from './pf';
 import { applyChange, suggestions, itemFlags, type Spec, type Change } from './fixes';
 
@@ -46,6 +46,10 @@ export function fixOptions(b: any, ev: any, issue: any): FixOption[] {
       if (rec.recommended.carrier !== sel.carrier) out.push({ id: 'switch-' + rec.recommended.carrier, label: 'Switch to ' + rec.recommended.carrier + ' (' + PF.gbp(rec.recommended.price * rec.pallets) + ')', specs: [{ kind: 'carrier', carrier: rec.recommended.carrier, rule }] });
       if (sel.minPallets && sel.minPallets !== b.pallets) out.push({ id: 'pallets-' + sel.carrier, ghost: true, label: 'Use ' + sel.minPallets + ' pallets with ' + sel.carrier + ' (' + PF.gbp(sel.minPallets * sel.price) + ')', specs: [{ kind: 'set', field: 'pallets', value: sel.minPallets, rule }] });
     }
+  } else if (rule === 'R-01') {
+    // A code such as 90240 that lost its leading zero (a spreadsheet read it as a number): offer 090240 in one click.
+    const z = issue.autofix;
+    if (z && z.item != null && items[z.item]) out.push({ id: 'hs-zero-' + z.item, label: z.label, specs: [{ kind: 'set', field: 'hs', value: z.set.hs, itemIndex: z.item, rule }] });
   } else if (rule === 'R-06') {
     rows(it => !!PF.hazardOf(it)).forEach(i => out.push({ id: 'remove-' + i, label: 'Remove ' + name(items[i]) + ' from this shipment', specs: [{ kind: 'remove', itemIndex: i, rule }] }));
   } else if (rule === 'R-07') {

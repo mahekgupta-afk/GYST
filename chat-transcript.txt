@@ -1,0 +1,269 @@
+
+=== 1. Northfield happy path ===
+YOU: I’m Northfield Goods. Sending 1,080 ceramic mugs from Manchester to a warehouse in Frankfurt, 3 pallets, ready 20-11-2026. £5 each, 12 per carton, 0.5 kg each, HS 691200, made in the UK. Appointment is booked, cheapest please.
+BOT: Got it: Northfield Goods; collecting from Manchester; delivering to Frankfurt; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 20-11-2026; 3 pallets; ceramic mugs, 1,080 units, £5 each, 12 per carton, 0.5 kg each, HS code 691200, made in United Kingdom. 1080 units at 12 per carton is 90 cartons, so I filled that in.
+     Is that everything in the shipment, or is there another product?
+     [320.7 ms]
+YOU: that’s everything
+BOT: I still need:
+     1. The total number of cartons (your products add up to 90)
+     2. The total gross weight in kg, including cartons and pallets (the products alone weigh 540 kg)
+     3. The total declared value in £ (your products add up to £5,400)
+     [57.6 ms]
+YOU: 90 cartons, 620 kg, £5,400
+BOT: Got it: £5,400 declared; 620 kg gross; 90 cartons.
+     That’s everything I need. Pre-flight result: all ten rules pass.
+     Recommended carrier: Carrier A (Road economy), £540.
+     You can change any detail, for example “add a pallet”.
+     [60.6 ms]
+
+=== 2. Changes after completion, then confirm ===
+YOU: I’m Northfield Goods. Sending 1,080 ceramic mugs from Manchester to a warehouse in Frankfurt, 3 pallets, ready 20-11-2026. £5 each, 12 per carton, 0.5 kg each, HS 691200, made in the UK. Appointment is booked, cheapest please.
+BOT: Got it: Northfield Goods; collecting from Manchester; delivering to Frankfurt; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 20-11-2026; 3 pallets; ceramic mugs, 1,080 units, £5 each, 12 per carton, 0.5 kg each, HS code 691200, made in United Kingdom. 1080 units at 12 per carton is 90 cartons, so I filled that in.
+     Is that everything in the shipment, or is there another product?
+     [83.9 ms]
+YOU: that’s everything
+BOT: I still need:
+     1. The total number of cartons (your products add up to 90)
+     2. The total gross weight in kg, including cartons and pallets (the products alone weigh 540 kg)
+     3. The total declared value in £ (your products add up to £5,400)
+     [3.1 ms]
+YOU: 90 cartons, 620 kg, £5,400
+BOT: Got it: £5,400 declared; 620 kg gross; 90 cartons.
+     That’s everything I need. Pre-flight result: all ten rules pass.
+     Recommended carrier: Carrier A (Road economy), £540.
+     You can change any detail, for example “add a pallet”.
+     [2.7 ms]
+YOU: add a pallet
+BOT: Updated pallets from 3 to 4.
+     Checks re-run: 0 red, 0 amber (was 0 and 0). Carrier A, £540 → £720.
+     Recommended carrier: Carrier A (Road economy), £720.
+     You can change any detail, for example “add a pallet”.
+     [2.1 ms]
+YOU: change priority to fastest
+BOT: Updated priority from Cheapest to Fastest.
+     Checks re-run: 0 red, 0 amber (was 0 and 0). Carrier A → Carrier C, £720 → £1,360.
+     Recommended carrier: Carrier C (Road express), £1,360.
+     You can change any detail, for example “add a pallet”.
+     [3.5 ms]
+YOU: confirm
+BOT: Booking it with Carrier C…
+     [1.3 ms]
+
+=== 3. Iron Co, too heavy for the fastest carrier ===
+YOU: Iron Co, 200 skillets, Leeds to Berlin warehouse, slot booked, ready 30-11-2026, fastest please, £22 each, 4 per carton, 50 cartons, 2.6 kg each, HS 732391, made in UK, that’s all, 1 pallet, 620 kg, declared £4,400
+BOT: Got it: Iron Co; collecting from Leeds; delivering to Berlin; delivery type: Warehouse; delivery appointment booked; priority: Fastest; ready on 30-11-2026; £4,400 declared; 620 kg gross; 1 pallet; 50 cartons; skillets, 200 units, £22 each, 4 per carton, 2.6 kg each, HS code 732391, made in United Kingdom. I used your 50 total cartons for the skillets, as it’s the only product.
+     That’s everything I need. Pre-flight result: 1 red problem. Don’t ship yet.
+     • R-05: Pallets too heavy for Carrier C
+     Recommended carrier: Carrier B (Road standard), £220.
+     620 kg per pallet; Carrier C (fastest) takes max 400 kg. That is 620 kg ÷ 1 pallet, 220 kg over the limit. Switch to Carrier B (Road standard), which takes up to 750 kg per pallet: £220 for 1 pallet. Or keep Carrier C and spread the load over 2 pallets (£680, 310 kg each). Switching is the cheaper fix (£460 less).
+     You can change any detail, for example “add a pallet”.
+     [76.7 ms]
+
+=== 4. Bloom Beauty, perfume and no appointment ===
+YOU: We’re Bloom Beauty. 240 bottles of eau de parfum 50ml going from London to Paris, warehouse, no slot yet, ready tomorrow, most reliable. £22 each, 24 per carton, 0.25kg each, HS 330300, made in Germany. Only one product. 1 pallet, 10 cartons, 80kg, £5,280
+BOT: Got it: Bloom Beauty; collecting from London; delivering to Paris; delivery type: Warehouse; no delivery appointment; priority: Most reliable; ready on 27-10-2026; £5,280 declared; 80 kg gross; 1 pallet; 10 cartons; bottles of eau de parfum 50ml, 240 units, £22 each, 24 per carton, 0.25 kg each, HS code 330300, made in Germany. I used your 10 total cartons for the bottles of eau de parfum 50ml, as it’s the only product.
+     That’s everything I need. Pre-flight result: 1 red problem and 1 amber warning. Don’t ship yet.
+     • R-06: Flammable liquid
+     • R-08: No delivery appointment
+     Recommended carrier: Carrier C (Road express), £330.
+     You can change any detail, for example “add a pallet”.
+     [5.1 ms]
+
+=== 5. Unsupported places ===
+YOU: We are shipping from Glasgow to Madrid
+BOT: Sorry, I can’t book Madrid (we deliver to Germany (Berlin, Frankfurt, Hamburg), France (Paris, Lyon) and the Netherlands (Amsterdam, Rotterdam)).
+     Sorry, I can’t book Glasgow (we collect from London, Manchester, Birmingham and Leeds).
+     I still need:
+     1. Your business name
+     2. Where it’s collected from and where it’s going
+     3. Whether it’s going to a warehouse or a business address
+     4. The date it’s ready for collection (DD-MM-YYYY)
+     5. What matters most: cheapest, fastest, most reliable or balanced
+     [7.0 ms]
+
+=== details: I’m Northfield Goods. Sending 1,080 cera ===
+YOU: I’m Northfield Goods. Sending 1,080 ceramic mugs from Manchester to a warehouse in Frankfurt, 3 pallets, ready 20-11-2026. £5 each, 12 per carton, 0.5 kg each, HS 691200, made in the UK. Appointment is booked, cheapest please.
+BOT: Got it: Northfield Goods; collecting from Manchester; delivering to Frankfurt; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 20-11-2026; 3 pallets; ceramic mugs, 1,080 units, £5 each, 12 per carton, 0.5 kg each, HS code 691200, made in United Kingdom. 1080 units at 12 per carton is 90 cartons, so I filled that in.
+     Is that everything in the shipment, or is there another product?
+     [20.0 ms]
+YOU: that’s everything
+BOT: I still need:
+     1. The total number of cartons (your products add up to 90)
+     2. The total gross weight in kg, including cartons and pallets (the products alone weigh 540 kg)
+     3. The total declared value in £ (your products add up to £5,400)
+     [4.3 ms]
+YOU: 90 cartons, 620 kg, £5,400
+BOT: Got it: £5,400 declared; 620 kg gross; 90 cartons.
+     That’s everything I need. Pre-flight result: all ten rules pass.
+     Recommended carrier: Carrier A (Road economy), £540.
+     You can change any detail, for example “add a pallet”.
+     [2.5 ms]
+
+=== details: I’m Northfield Goods. Sending 1,080 cera ===
+YOU: I’m Northfield Goods. Sending 1,080 ceramic mugs from Manchester to a warehouse in Frankfurt, 3 pallets, ready 20-11-2026. £5 each, 12 per carton, 0.5 kg each, HS 691200, made in the UK. Appointment is booked, cheapest please.
+BOT: Got it: Northfield Goods; collecting from Manchester; delivering to Frankfurt; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 20-11-2026; 3 pallets; ceramic mugs, 1,080 units, £5 each, 12 per carton, 0.5 kg each, HS code 691200, made in United Kingdom. 1080 units at 12 per carton is 90 cartons, so I filled that in.
+     Is that everything in the shipment, or is there another product?
+     [1.3 ms]
+YOU: that’s everything
+BOT: I still need:
+     1. The total number of cartons (your products add up to 90)
+     2. The total gross weight in kg, including cartons and pallets (the products alone weigh 540 kg)
+     3. The total declared value in £ (your products add up to £5,400)
+     [0.9 ms]
+YOU: 90 cartons, 620 kg, 5400 pounds
+BOT: Got it: £5,400 declared; 620 kg gross; 90 cartons.
+     That’s everything I need. Pre-flight result: all ten rules pass.
+     Recommended carrier: Carrier A (Road economy), £540.
+     You can change any detail, for example “add a pallet”.
+     [1.3 ms]
+
+=== details: I’m Northfield Goods. Sending 1,080 cera ===
+YOU: I’m Northfield Goods. Sending 1,080 ceramic mugs from Manchester to a warehouse in Frankfurt, 3 pallets, ready 20-11-2026. £5 each, 12 per carton, 0.5 kg each, HS 691200, made in the UK. Appointment is booked, cheapest please.
+BOT: Got it: Northfield Goods; collecting from Manchester; delivering to Frankfurt; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 20-11-2026; 3 pallets; ceramic mugs, 1,080 units, £5 each, 12 per carton, 0.5 kg each, HS code 691200, made in United Kingdom. 1080 units at 12 per carton is 90 cartons, so I filled that in.
+     Is that everything in the shipment, or is there another product?
+     [2.4 ms]
+YOU: that’s everything
+BOT: I still need:
+     1. The total number of cartons (your products add up to 90)
+     2. The total gross weight in kg, including cartons and pallets (the products alone weigh 540 kg)
+     3. The total declared value in £ (your products add up to £5,400)
+     [1.6 ms]
+YOU: 90 cartons, 620 kg, £5.4k
+BOT: Got it: £5,400 declared; 620 kg gross; 90 cartons.
+     That’s everything I need. Pre-flight result: all ten rules pass.
+     Recommended carrier: Carrier A (Road economy), £540.
+     You can change any detail, for example “add a pallet”.
+     [1.4 ms]
+
+=== details: I’m Northfield Goods. Sending 1,080 cera ===
+YOU: I’m Northfield Goods. Sending 1,080 ceramic mugs from Manchester to a warehouse in Frankfurt, 3 pallets, ready 20-11-2026. £5 each, 12 per carton, 0.5 kg each, HS 691200, made in the UK. Appointment is booked, cheapest please.
+BOT: Got it: Northfield Goods; collecting from Manchester; delivering to Frankfurt; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 20-11-2026; 3 pallets; ceramic mugs, 1,080 units, £5 each, 12 per carton, 0.5 kg each, HS code 691200, made in United Kingdom. 1080 units at 12 per carton is 90 cartons, so I filled that in.
+     Is that everything in the shipment, or is there another product?
+     [1.3 ms]
+YOU: that’s everything
+BOT: I still need:
+     1. The total number of cartons (your products add up to 90)
+     2. The total gross weight in kg, including cartons and pallets (the products alone weigh 540 kg)
+     3. The total declared value in £ (your products add up to £5,400)
+     [1.3 ms]
+YOU: 90 cartons, 620 kg, 5,400 GBP
+BOT: Got it: £5,400 declared; 620 kg gross; 90 cartons.
+     That’s everything I need. Pre-flight result: all ten rules pass.
+     Recommended carrier: Carrier A (Road economy), £540.
+     You can change any detail, for example “add a pallet”.
+     [1.3 ms]
+
+=== details: I’m Northfield Goods. Sending 1,080 cera ===
+YOU: I’m Northfield Goods. Sending 1,080 ceramic mugs from Manchester to a warehouse in Frankfurt, 3 pallets, ready 20-11-2026. £5 each, 12 per carton, 0.5 kg each, HS 691200, made in the UK. Appointment is booked, cheapest please.
+BOT: Got it: Northfield Goods; collecting from Manchester; delivering to Frankfurt; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 20-11-2026; 3 pallets; ceramic mugs, 1,080 units, £5 each, 12 per carton, 0.5 kg each, HS code 691200, made in United Kingdom. 1080 units at 12 per carton is 90 cartons, so I filled that in.
+     Is that everything in the shipment, or is there another product?
+     [1.3 ms]
+YOU: that’s everything
+BOT: I still need:
+     1. The total number of cartons (your products add up to 90)
+     2. The total gross weight in kg, including cartons and pallets (the products alone weigh 540 kg)
+     3. The total declared value in £ (your products add up to £5,400)
+     [0.8 ms]
+YOU: 90 cartons, 620 kg, £5,400
+BOT: Got it: £5,400 declared; 620 kg gross; 90 cartons.
+     That’s everything I need. Pre-flight result: all ten rules pass.
+     Recommended carrier: Carrier A (Road economy), £540.
+     You can change any detail, for example “add a pallet”.
+     [19.1 ms]
+YOU: actually the mugs are £6 each
+BOT: Updated ceramic mugs unit price from £5 to £6.
+     Checks re-run: 1 red, 0 amber (was 0 and 0). Carrier A and £540 are unchanged. Don’t ship yet.
+     • R-02: Declared value doesn’t match the items
+     Recommended carrier: Carrier A (Road economy), £540.
+     You can change any detail, for example “add a pallet”.
+     [3.6 ms]
+
+=== grams ===
+YOU: Acme Ltd, 100 candles from Leeds to Paris warehouse, appointment booked, ready 05-11-2026, cheapest, £4 each, 10 per carton
+BOT: Got it: Acme Ltd; collecting from Leeds; delivering to Paris; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 05-11-2026; candles, 100 units, £4 each, 10 per carton. 100 units at 10 per carton is 10 cartons, so I filled that in.
+     I still need:
+     1. Weight of one unit (kg)
+     2. HS code
+     3. Country of origin
+     [7.4 ms]
+YOU: each one weighs 350 g
+BOT: Got it: candles: 0.35 kg each.
+     What’s the HS code for the candles? Customs needs at least 6 digits.
+     [0.9 ms]
+
+=== grams, short ===
+YOU: Acme Ltd, 100 candles from Leeds to Paris warehouse, appointment booked, ready 05-11-2026, cheapest, £4 each, 10 per carton, HS 340600, made in UK
+BOT: Got it: Acme Ltd; collecting from Leeds; delivering to Paris; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 05-11-2026; candles, 100 units, £4 each, 10 per carton, HS code 340600, made in United Kingdom. 100 units at 10 per carton is 10 cartons, so I filled that in.
+     How much does one unit weigh, in kg?
+     [9.3 ms]
+YOU: 350 g
+BOT: Got it: candles: 0.35 kg each.
+     Is that everything in the shipment, or is there another product?
+     [0.8 ms]
+
+=== hs 8518 ===
+YOU: Acme Ltd, 100 speakers from Leeds to Paris warehouse, appointment booked, ready 05-11-2026, cheapest, £4 each, 10 per carton, 0.5 kg each, HS 8518, made in China
+BOT: Got it: Acme Ltd; collecting from Leeds; delivering to Paris; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 05-11-2026; speakers, 100 units, £4 each, 10 per carton, 0.5 kg each, HS code 8518, made in China. 100 units at 10 per carton is 10 cartons, so I filled that in.
+     Is that everything in the shipment, or is there another product?
+     [1.7 ms]
+YOU: that’s everything
+BOT: I still need:
+     1. The number of pallets
+     2. The total number of cartons (your products add up to 10)
+     3. The total gross weight in kg, including cartons and pallets (the products alone weigh 50 kg)
+     4. The total declared value in £ (your products add up to £400)
+     [9.9 ms]
+YOU: 1 pallet, 10 cartons, 60 kg, £400
+BOT: Got it: £400 declared; 60 kg gross; 1 pallet; 10 cartons.
+     That’s everything I need. Pre-flight result: 1 red problem. Don’t ship yet.
+     • R-01: HS code too short
+     Recommended carrier: Carrier A (Road economy), £170.
+     You can change any detail, for example “add a pallet”.
+     [18.7 ms]
+
+=== details: Hexa Gadgets here, 300 phone chargers fr ===
+YOU: Hexa Gadgets here, 300 phone chargers from London to Berlin warehouse
+BOT: Got it: Hexa Gadgets; collecting from London; delivering to Berlin; delivery type: Warehouse; phone chargers, 300 units.
+     I still need:
+     1. Whether a delivery appointment is booked at the warehouse
+     2. The date it’s ready for collection (DD-MM-YYYY)
+     3. What matters most: cheapest, fastest, most reliable or balanced
+     [5.6 ms]
+
+=== details: Tiny Co, 100 candles from Leeds to Paris ===
+YOU: Tiny Co, 100 candles from Leeds to Paris
+BOT: Got it: Tiny Co; collecting from Leeds; delivering to Paris; candles, 100 units.
+     I still need:
+     1. Whether it’s going to a warehouse or a business address
+     2. The date it’s ready for collection (DD-MM-YYYY)
+     3. What matters most: cheapest, fastest, most reliable or balanced
+     [1.4 ms]
+
+=== confirm too early ===
+YOU: I’m Northfield Goods. Sending 1,080 ceramic mugs from Manchester to a warehouse in Frankfurt, 3 pallets, ready 20-11-2026. £5 each, 12 per carton, 0.5 kg each, HS 691200, made in the UK. Appointment is booked, cheapest please.
+BOT: Got it: Northfield Goods; collecting from Manchester; delivering to Frankfurt; delivery type: Warehouse; delivery appointment booked; priority: Cheapest; ready on 20-11-2026; 3 pallets; ceramic mugs, 1,080 units, £5 each, 12 per carton, 0.5 kg each, HS code 691200, made in United Kingdom. 1080 units at 12 per carton is 90 cartons, so I filled that in.
+     Is that everything in the shipment, or is there another product?
+     [40.5 ms]
+YOU: confirm
+BOT: I can’t book it yet, there’s still something I need. Is that everything in the shipment, or is there another product?
+     [1.0 ms]
+
+=== short replies ===
+YOU: hi I need to ship some stuff to germany
+BOT: Got it: delivering to Germany.
+     I still need:
+     1. Your business name
+     2. Where it’s collected from and where it’s going
+     3. Whether it’s going to a warehouse or a business address
+     4. The date it’s ready for collection (DD-MM-YYYY)
+     5. What matters most: cheapest, fastest, most reliable or balanced
+     [1.9 ms]
+YOU: Acme Ltd
+BOT: Got it: Acme Ltd.
+     I still need:
+     1. Where it’s collected from and where it’s going
+     2. Whether it’s going to a warehouse or a business address
+     3. The date it’s ready for collection (DD-MM-YYYY)
+     4. What matters most: cheapest, fastest, most reliable or balanced
+     [1.6 ms]

@@ -19,7 +19,7 @@ export function exampleTables(today: string) {
     B('EX-002', 'Harbour & Co', 'London', 'Paris', 'France', 'Warehouse', d(4), 'Fastest', 2, 70, 5600, 340, 'No'),
     // c) several reds: declared value (R-02), carton maths (R-03), an aerosol (R-06) and a missing HS code (R-01)
     B('EX-003', 'Hexa Gadgets', 'London', 'Frankfurt', 'Germany', 'Warehouse', d(5), 'Balanced', 1, 45, 4000, 160, 'Yes'),
-    // d) heavy: 750 kg a pallet is over Carrier A's limit, so the cheapest carrier is ruled out and another is recommended
+    // d) heavy: 750 kg a pallet is over Carrier A's limit; Cheapest would pick A, so R-05 is red with a one-click switch to Carrier B
     B('EX-004', 'Forge Hardware', 'Manchester', 'Hamburg', 'Germany', 'Warehouse', d(2), 'Cheapest', 2, 100, 7000, 1500, 'Yes'),
   ];
   const items = [

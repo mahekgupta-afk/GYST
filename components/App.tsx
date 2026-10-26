@@ -15,10 +15,10 @@ import Footer from './Footer';
 import { useHsResults } from './HsPanel';
 import { suggestHs, verifyHs } from '@/lib/hsClient';
 import { descriptionLooksOff, shortText } from '@/lib/hs';
+import { composeReply, beforeAfter, snapshotOf, completeChips as chipsFor, sig, type Reply, type Prev } from '@/lib/chatReply';
 import CarrierOptions, { type UseDetails } from './CarrierOptions';
 
 type Msg = { role: 'bot' | 'user'; text: string; chips?: string[] | null; typing?: boolean; needs?: string[]; example?: string; suggest?: { code: string; label: string }[] };
-const sig = (c: any) => JSON.stringify(Object.assign({}, c.b, { _confirmed: undefined }));
 const GREETING = 'Let’s get your shipment sorted. Tell me what you’re sending, in your own words, and I’ll only ask about what’s missing.\nOnce I have it, I’ll check the paperwork before it leaves and recommend the right carrier.\nI cover collections from London, Manchester, Birmingham and Leeds to Germany, France and the Netherlands.';
 
 export default function App() {
@@ -45,7 +45,7 @@ export default function App() {
   const pendingBook = useRef(false);
   const inFlight = useRef<Set<any>>(new Set());
   const chat = useRef<any>(C.newChat());
-  const prev = useRef<{ red: number; amber: number } | null>(null);
+  const prev = useRef<Prev>(null);
   const msgsRef = useRef<Msg[]>([]);
   const logEl = useRef<HTMLDivElement>(null);
   const inputEl = useRef<HTMLTextAreaElement>(null);
@@ -126,67 +126,19 @@ export default function App() {
   // Grow with the text. An empty box keeps its natural height (measuring it at page load could leave it stuck at the maximum).
   useEffect(() => { const t = inputEl.current; if (!t) return; if (!input) { t.style.height = ''; return; } t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; }, [input]);
 
-  const completeChips = (ev: any) => {
-    if (chat.current.b._confirmed) return ['Start a new booking'];
-    const out = ['Add a pallet', 'Change priority to Fastest'];
-    if (ev && ev.status !== 'blocked') out.unshift('Book it');
-    return out;
-  };
+  const completeChips = (ev: any) => chipsFor(chat.current, ev);
 
-  type Reply = { text: string; chips: string[] | null; needs?: string[]; example?: string };
   function compose(log: any, snap: any): Reply {
-    const c = chat.current, a = c.asked;
-    // When several details are missing the bot lists them (shown as a short red numbered list) instead of one long sentence.
-    const qOf = (x: any) => (x && x.needs ? 'I still need:' : x?.q);
-    const listOf = (x: any) => (x && x.needs ? { needs: x.needs as string[], example: x.example as string } : {});
-    const ack = C.ackText(log);
-    const dp = log.dateProblem;
-    const dateText = dp ? (dp.invalid ? '“' + dp.invalid + '” isn’t a real date. ' : '“' + dp.ambiguous + '” isn’t an exact date, so I haven’t saved one. ') + 'Please give me the day, for example 05-11-2026 or 5 Nov.' : '';
-    const extra = [(log.scope || []).join('\n'), dateText].filter(Boolean).join('\n');
-    const askAgain = a && !(dp && a.key === 'readyDate');
-    // A refused value: say which field and why, keep the old value, ask again. Valid values in the same message were still stored.
-    const refusals = (log.rejected || []).map((r: any) => r.message);
-    if (refusals.length) return { text: [ack, extra, ...refusals].filter(Boolean).join('\n'), chips: null };
-    if (!log.understood) {
-      if (extra) return { text: extra + (askAgain ? '\n' + qOf(a) : ''), chips: a && askAgain ? a.chips : null, ...(askAgain ? listOf(a) : {}) };
-      return { text: 'Sorry, I didn’t catch that. ' + (a ? (a.hint || '') + qOf(a) : 'You can say things like “add a pallet”, “change the priority to Fastest”, “use Carrier B” or “book it”.'), chips: a ? a.chips : completeChips(null), ...listOf(a) };
-    }
-    let head = ack || (a ? '' : 'Noted.');
-    if (extra) head = (head ? head + '\n' : '') + extra;
-    if (a && !askAgain) return { text: head, chips: null };
-    if (a) return { text: (head ? head + '\n' : '') + qOf(a), chips: a.chips, ...listOf(a) };
-    const b = c.b;
-    if (JSON.stringify(Object.assign({}, snap.b, { _confirmed: undefined })) !== sig(c)) b._confirmed = false;
-    const ev = PF.evaluate(b);
-    if (log.intent === 'confirm') {
-      if (ev.status === 'blocked') return { text: 'I can’t book this yet: ' + plural(ev.counts.red, 'red problem') + ' still need fixing. ' + ev.issues.filter((i: any) => i.sev === 'red').slice(0, 4).map((i: any) => i.title).join('; ') + '.', chips: completeChips(ev) };
-      const open = unacknowledged(b, ev);
-      if (open.length) return { text: 'I can book this once you’ve acknowledged ' + (open.length === 1 ? 'the warning' : 'the ' + open.length + ' warnings') + ': ' + open.slice(0, 4).map((i: any) => i.title).join('; ') + '. Tick “I understand” in the Book this shipment panel, or say “I acknowledge the warnings”.', chips: ['I acknowledge the warnings'] };
-      pendingBook.current = true; prev.current = { red: ev.counts.red, amber: ev.counts.amber };
-      return { text: 'Booking it with ' + ev.rec.selected.carrier + '…', chips: null };
-    }
-    const first = !prev.current;
-    const lines = ev.issues.slice(0, 6).map((i: any) => '• ' + (i.rule === 'DATA' ? 'Missing detail' : i.rule === 'INPUT' ? 'Input error' : i.rule) + ': ' + i.title + (i.item ? ' (' + i.item + ')' : ''));
-    if (ev.issues.length > 6) lines.push('• …and ' + (ev.issues.length - 6) + ' more');
-    const verdict = ev.status === 'blocked' ? 'Pre-flight result: ' + plural(ev.counts.red, 'red problem') + (ev.counts.amber ? ' and ' + plural(ev.counts.amber, 'amber warning') : '') + '. Don’t ship yet.'
-      : ev.status === 'warning' ? 'Pre-flight result: no red problems, but ' + plural(ev.counts.amber, 'amber warning') + '.'
-      : 'Pre-flight result: all ten rules pass.';
-    let text = head + '\n' + (first ? 'That’s everything I need. ' : 'I’ve re-run the checks. ') + verdict;
-    if (prev.current && !first) text += ' (Before: ' + prev.current.red + ' red, ' + prev.current.amber + ' amber.)';
-    if (lines.length) text += '\n' + lines.join('\n');
-    const r = ev.rec;
-    if (r.recommended) text += '\nRecommended carrier: ' + r.recommended.carrier + ' (' + r.recommended.service + '), ' + PF.gbp(r.recommended.price * r.pallets) + '.';
-    else if (r.blocked) text += '\nFix the input errors above to get a carrier recommendation.';
-    else text += '\nNo carrier can take this weight per pallet. See the fix on the right.';
-    text += '\nYou can change any detail, for example “add a pallet”.';
-    prev.current = { red: ev.counts.red, amber: ev.counts.amber };
-    return { text, chips: completeChips(ev) };
+    const out = composeReply(chat.current, log, snap, prev.current);
+    prev.current = out.prev;
+    if (out.book) pendingBook.current = true;
+    return out.reply;
   }
 
   /** Ask Gemini (via our server route) to read the message. Returns null on any failure. */
   async function readWithAI(c0: any, text: string, askQ: string | null) {
     // 15 s limit (lib/net.ts): never leave the chat hanging on "Reading your message…". A timeout or error falls back to the built-in parser.
-    const { res, json } = await fetchJson('/api/parse-message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ booking: c0.b, text, askText: askQ }) });
+    const { res, json } = await fetchJson('/api/parse-message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ booking: c0.b, text, askText: askQ }) }, 4500);
     if (!res.ok) { const e: any = new Error('ai'); e.status = res.status; throw e; }
     return C.aiToEx(json.result, c0);
   }
@@ -233,7 +185,6 @@ export default function App() {
       return;
     }
     setBusy(true);
-    let aiFailed = false;
     const c0 = chat.current, snap = C.cloneChat(c0);
     const askQ = c0.reask ? c0.reask.message : c0.asked ? c0.asked.q : null;
     let log: any = null;
@@ -249,17 +200,11 @@ export default function App() {
         popMsg();
         chat.current = C.cloneChat(snap);
         log = null;
-        aiFailed = true;
-        if (e && e.status === 503) setAiOn(false);
+        setAiOn(false);                                  // the built-in parser carries on alone, so later messages answer at once
       }
     }
     if (!log) log = C.step(chat.current, text, {});
     setBusy(false);
-    if (aiFailed && !log.understood && !log.reset) {
-      say('bot', 'I couldn’t read that just now. Your booking so far is kept, so please try again or say it another way.', chat.current.asked ? chat.current.asked.chips : null);
-      bump();
-      return;
-    }
     if (log.reset) { newBooking(); return; }
     const reply = compose(log, snap);
     say('bot', reply.text, reply.chips, false, { needs: reply.needs, example: reply.example });
@@ -361,8 +306,8 @@ export default function App() {
     const res = applyChange(b, spec);
     if (!res.ok) { say('bot', res.message, completeChips(before)); bump(); return res; }
     const ev = PF.evaluate(b), ch = b._changes[b._changes.length - 1];
-    say('bot', 'Updated ' + ch.scope + ', ' + ch.field + ': ' + ch.from + ' → ' + ch.to + '. Checks re-run: ' + plural(ev.counts.red, 'red problem') + ', ' + plural(ev.counts.amber, 'amber warning') + ' (was ' + before.counts.red + ' and ' + before.counts.amber + ').', completeChips(ev));
-    prev.current = { red: ev.counts.red, amber: ev.counts.amber };
+    say('bot', 'Updated ' + ch.scope + ', ' + ch.field + ': ' + ch.from + ' → ' + ch.to + '. ' + beforeAfter(snapshotOf(before), snapshotOf(ev)), completeChips(ev));
+    prev.current = snapshotOf(ev);
     thump(); bump();
     return res;
   };
@@ -592,9 +537,9 @@ export default function App() {
           <ol className="how">
             <li>Weight per pallet is gross weight ÷ pallets. Any carrier whose limit is at least that (exactly equal passes) can take the load.</li>
             <li>Among those carriers: <b>Cheapest</b> takes the lowest total price, <b>Fastest</b> the fewest days, <b>Most reliable</b> the highest on-time rate.</li>
-            <li><b>Balanced</b> scores each carrier from 0 to 1 on price, transit days and on-time rate, comparing only the carriers that can take the load (lower price and fewer days score higher, higher on-time scores higher). The three scores are averaged with equal weight, one third each, and the highest average wins.</li>
+            <li><b>Balanced</b> scores each carrier from 0 to 1 on price, transit days and on-time rate, comparing only the carriers that can take the load (lower price and fewer days score higher, higher on-time scores higher). The scores are combined with weights: cost 40%, speed 30%, reliability 30%, and the highest total wins.</li>
             <li>Ties go to the lower price, then fewer days, then the earlier carrier letter.</li>
-            <li>R-05 is checked against the carrier in use. It passes when the recommended carrier can take the load, and is Red only when no carrier can (or a carrier you picked can’t).</li>
+            <li>R-05 is checked against the carrier your priority would pick if weight didn’t matter (or the carrier you chose). If it can’t take the weight per pallet, R-05 is Red with two priced one-click fixes: switch to a carrier that can, or use more pallets with the same carrier.</li>
           </ol>
           <p style={{ margin: '16px 0 8px' }}><b>Carrier rate card (fixed)</b></p>
           <div className="scroll"><table>

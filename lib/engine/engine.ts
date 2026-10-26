@@ -31,7 +31,7 @@ const PRIORITIES = ['Cheapest', 'Fastest', 'Most reliable', 'Balanced'];
 const ORIGINS = ['London', 'Manchester', 'Birmingham', 'Leeds'];
 const DESTS = { Berlin: 'Germany', Frankfurt: 'Germany', Hamburg: 'Germany', Paris: 'France', Lyon: 'France', Amsterdam: 'Netherlands', Rotterdam: 'Netherlands' };
 const COUNTRIES = ['United Kingdom', 'China', 'India', 'Vietnam', 'Turkey', 'Germany'];
-const BALANCED_WEIGHTS = { cost: 1 / 3, speed: 1 / 3, reliability: 1 / 3 };
+const BALANCED_WEIGHTS = { cost: 0.4, speed: 0.3, reliability: 0.3 };
 
 /* ---------- Formatting + date helpers ---------- */
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -73,7 +73,21 @@ function parseDate(v) {
   if (m) { let y = +m[3]; if (y < 100) y += 2000; return ymd(y, +m[2], +m[1]); }
   m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (m) return ymd(+m[1], +m[2], +m[3]);
+  const mon = t => { const i = MON.findIndex(x => x.toLowerCase() === t.slice(0, 3).toLowerCase()); return i < 0 ? 0 : i + 1; };
+  m = /^(\d{1,2})(?:st|nd|rd|th)?[\s-]+([A-Za-z]{3,9})\.?,?[\s-]+(\d{4})$/.exec(s);          // 10th Nov 2026, 5 November 2026
+  if (m && mon(m[2])) return ymd(+m[3], mon(m[2]), +m[1]);
+  m = /^([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})$/.exec(s);                 // Dec 9, 2026
+  if (m && mon(m[1])) return ymd(+m[3], mon(m[1]), +m[2]);
   return null;
+}
+// A text date such as 05-11-2026 is read day-first. When that lands in the past but month-first would not, R-10 says so.
+function monthFirstReading(raw, today) {
+  if (typeof raw !== 'string') return null;
+  const m = /^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/.exec(raw.trim());
+  if (!m || +m[1] > 12 || +m[2] > 12 || m[1] === m[2]) return null;
+  let y = +m[3]; if (y < 100) y += 2000;
+  const alt = ymd(y, +m[1], +m[2]);
+  return alt && alt >= today ? alt : null;
 }
 function num(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -129,7 +143,9 @@ function recommend(b) {
   const rec = { options, pallets, gw, wpp, priority, preferred, recommended: blocked ? null : recommended, blocked, assumedPriority: PRIORITIES.indexOf(b.priority) < 0 };
   // R-05 is checked against the carrier in use: one the user picked, otherwise the recommendation.
   const picked = b._carrier ? options.find(o => o.carrier === b._carrier) : null;
-  rec.selected = picked || rec.recommended || preferred;
+  // The priority's own pick (ignoring weight) is the carrier in use unless the seller chose one. If it cannot take the load R-05 is Red with
+  // priced fixes; the booking is not quietly moved to another carrier.
+  rec.selected = picked || preferred;
   rec.userPicked = !!picked;
   rec.reason = explain(rec, b);
   rec.ruledOutNotes = ruledOutNotes(rec);
@@ -161,7 +177,7 @@ function explain(rec, b) {
   else {
     const scores = rankBy(feas, 'Balanced').map(o => letterOf(o) + ' ' + o.score.toFixed(2)).join(', ');
     s = label + ' scores highest on Balanced for ' + dest + ': ' + facts + cost +
-      ' Balanced scores each carrier from 0 to 1 on price, speed and reliability (lower price and fewer days are better, higher on-time is better), compares them across the carriers that can take this load, and weights the three equally. Scores: ' + scores + '.' +
+      ' Balanced scores each carrier from 0 to 1 on price, speed and reliability (lower price and fewer days are better, higher on-time is better), compares them across the carriers that can take this load, and weights them cost 40%, speed 30%, reliability 30%. Scores: ' + scores + '.' +
       (others.length ? ' The others lost: ' + others.map(o => o.carrier + ' is ' + diffText(o, r)).join('; ') + '.' : '');
   }
   if (rec.assumedPriority) s += ' No priority was given, so we used Balanced.';
@@ -180,21 +196,43 @@ function ruledOutNotes(rec) {
 }
 
 /* ---------- Hazard detection (R-06) ---------- */
-const HAZ = [
-  { type: 'a lithium battery product', re: /\b(lithium(?![\s-]*(?:soap|grease|stearate|salt|carbonate|hydroxide|chloride)\b)|li[\s-]?ion|li[\s-]?po|lipo|lifepo4|power[\s-]?banks?|e[\s-]?cig(?:arette)?s?|vapes?|vaping)\b/i },
-  { type: 'a battery product (most are lithium)', re: /\bbatter(?:y|ies)\b/i },
-  { type: 'an aerosol or pressurised can', re: /\b(aerosols?|spray[\s-]?paints?|spray[\s-]?cans?|hair\s?spray|body\s?spray|deodorant\s+spray|dry\s+shampoo|canned\s+air|pressuri[sz]ed)\b/i },
-  { type: 'a flammable liquid or gas', re: /\b(flammable|inflammable|petrol|gasoline|kerosene|lighter\s+(?:fluid|fuel)|white\s+spirit|turpentine|acetone|methylated\s+spirits?|denatured\s+alcohol|paint\s+thinners?|nail\s+polish\s+remover|butane|propane|gas\s+(?:canisters?|cylinders?|bottles?)|isopropyl|rubbing\s+alcohol|hand\s+sanitis?er|(?:alcohol|ethanol)[\s-]based)\b/i },
-  { type: 'a perfume or aftershave (possibly a flammable liquid)', re: /\b(perfumes?|aftershaves?|eau\s+de\s+(?:toilette|parfum|cologne)|colognes?|parfum)\b/i },
-  { type: 'matches or a lighter (flammable)', re: /\b(?:(?:cigarette|gas|pocket|disposable|bbq|zippo|torch)\s+lighters?|lighters|box(?:es)?\s+of\s+matches|matchbooks?|matchsticks?|safety\s+matches)\b/i }
-];
-// These phrases say the product does not have the hazard, so they are removed before matching.
-// “batteries not included” is deliberately NOT here: it is ambiguous, so it is still flagged.
-const NEG = /\b(non[\s-]?flammable|not\s+flammable|non[\s-]?aerosol|battery[\s-]?free|lithium[\s-]?free|no\s+batter(?:y|ies)|without\s+batter(?:y|ies)|non[\s-]?lithium|alcohol[\s-]?free)\b/gi;
+/* R-06 runs in layers so it catches hazards that never use the obvious word (earbuds, perfume)
+   and does not panic at safe uses of scary words (non-flammable, battery-free, alkaline AA, spray bottle). */
+const NEG = /\b(non[\s-]?flammable|not\s+flammable|non[\s-]?inflammable|flame[\s-]?(?:retardant|resistant)|fire[\s-]?(?:retardant|resistant|proof)|non[\s-]?aerosol|battery[\s-]?free|lithium[\s-]?free|no\s+batter(?:y|ies)|without\s+batter(?:y|ies)|batter(?:y|ies)\s+not\s+included|non[\s-]?lithium|alcohol[\s-]?free|fragrance[\s-]?free|solvent[\s-]?free|water[\s-]?based)\b/gi;
+const LI_EXPLICIT = /\b(lithium(?![\s-]*(?:soap|grease|stearate|salt|carbonate|hydroxide|chloride)\b)|li[\s-]?ion|li[\s-]?po(?:ly(?:mer)?)?|lipo|lifepo4|18650|21700|cr20(?:16|25|32)|button\s+cells?|coin\s+cells?)\b/i;
+const NON_LI_CELL = /\b(alkaline|zinc[\s-]?(?:carbon|chloride)|ni[\s-]?mh|nickel[\s-]?metal|lead[\s-]?acid)\b/i;
+const LI_DEVICE = /\b(power\s?banks?|portable\s+chargers?|e[\s-]?cig(?:arette)?s?|vapes?|vape\s+pens?|vaping|e[\s-]?bikes?|electric\s+(?:bikes?|bicycles?|scooters?|skateboards?|toothbrush(?:es)?|shavers?|razors?)|e[\s-]?scooters?|hoverboards?|(?:wireless|bluetooth|true\s+wireless|tws|noise[\s-]?cancel+ing)\s+(?:ear\s?buds?|earphones?|headphones?|headsets?|speakers?)|ear\s?buds?|airpods|smart\s?watch(?:es)?|fitness\s+trackers?|activity\s+trackers?|smart\s?phones?|mobile\s+phones?|laptops?|notebook\s+computers?|ipads?|android\s+tablets?|tablet\s+(?:computers?|pcs?)|drones?|action\s+cam(?:era)?s?|dash\s?cams?|digital\s+cameras?|portable\s+speakers?|cordless\s+(?:drills?|vacuums?|screwdrivers?|tools?|trimmers?|hoovers?)|rechargeable|built[\s-]?in\s+batter(?:y|ies)|gps\s+trackers?|smart\s+rings?)\b/i;
+const ACCESSORY = /\b(phone|smartphone|laptop|tablet|ipad|camera|watch|smartwatch|ear\s?buds?|headphones?|speaker|drone|airpods)s?\s+(cases?|covers?|sleeves?|bags?|pouch(?:es)?|stands?|holders?|mounts?|straps?|bands?|skins?|protectors?|cables?|leads?|docks?|tripods?)\b|\bscreen\s+protectors?\b/i;
+const BATTERY_WORD = /\b(batter(?:y|ies)|battery[\s-]?(?:powered|operated))\b/i;
+const AEROSOL = /\b(aerosols?|spray[\s-]?(?:paints?|cans?)|hair\s?sprays?|body\s+sprays?|deodorant\s+sprays?|spray\s+deodorants?|antiperspirant\s+sprays?|dry\s+shampoo|canned\s+air|compressed\s+air|pressuri[sz]ed\s+(?:cans?|containers?|cylinders?)|shaving\s+(?:foam|gel)|whipped\s+cream\s+(?:cans?|chargers?)|cream\s+chargers?|air\s+freshener\s+sprays?|insect\s+sprays?|bug\s+sprays?|fly\s+sprays?|wd[\s-]?40|spray[\s-]?(?:starch|tan|sunscreen|polish|oil)|cooking\s+sprays?)\b/i;
+const NOT_AEROSOL = /\b(pump|trigger|mister|atomi[sz]er|empty|refillable\s+bottle)\b/i;
+const FLAMMABLE = /\b(flammable|inflammable|petrol|gasoline|kerosene|paraffin|lamp\s+oil|diesel|bio[\s-]?ethanol|ethanol|methanol|lighter\s+(?:fluid|fuel|gas|refills?)|(?:cigarette|gas|butane|disposable|refillable|windproof|jet|pocket)\s+lighters?|white\s+spirit|turpentine|acetone|methylated\s+spirits?|denatured\s+alcohol|paint\s+thinners?|(?:oil|solvent)[\s-]based\s+(?:paints?|varnish(?:es)?|stains?|primers?)|varnish(?:es)?|lacquers?|wood\s+stains?|contact\s+adhesive|nail\s+(?:polish|varnish|lacquer)(?:\s+remover)?|box(?:es)?\s+of\s+matches|matchbooks?|matchsticks?|safety\s+matches|butane|propane|camping\s+gas|gas\s+canisters?|isopropyl|rubbing\s+alcohol|surgical\s+spirit|hand\s+sanitis?ers?|alcohol[\s-]based|perfumes?|parfum|eau\s+de\s+(?:parfum|toilette|cologne)|colognes?|after[\s-]?shave|body\s+mist|reed\s+diffusers?|fragrance\s+oils?)\b/i;
+const SPIRIT = /\b(whisk(?:e)?y|scotch|bourbon|vodka|gin|rum|brandy|cognac|armagnac|tequila|mezcal|absinthe|schnapps|grappa|ouzo|liqueur|spirits?)\b/i;
 function hazardOf(it) {
-  const text = ((it.desc || '') + ' ' + (it.sku || '')).replace(NEG, ' ');
-  for (const h of HAZ) { const m = h.re.exec(text); if (m) return { type: h.type, word: m[0] }; }
+  const raw = ((it.desc || '') + ' ' + (it.sku || ''));
+  const text = raw.replace(NEG, ' ');
+  let m;
+  if ((m = LI_EXPLICIT.exec(text))) return { kind: 'lithium', type: 'a lithium battery or a product containing one', word: m[0], level: 'definite' };
+  const noBatt = /batter(?:y|ies)\s+not\s+included|without\s+batter(?:y|ies)|no\s+batter(?:y|ies)/i.test(raw);
+  if (!noBatt && !ACCESSORY.test(text) && (m = LI_DEVICE.exec(text))) return { kind: 'lithium', type: 'a device that almost always contains a lithium battery', word: m[0], level: 'likely' };
+  if (!noBatt && (m = BATTERY_WORD.exec(text)) && !NON_LI_CELL.test(text)) return { kind: 'lithium', type: 'a battery product whose chemistry isn’t stated (most are lithium)', word: m[0], level: 'likely' };
+  if ((m = AEROSOL.exec(text)) && !NOT_AEROSOL.test(text)) return { kind: 'aerosol', type: 'an aerosol', word: m[0], level: 'definite' };
+  const text2 = text.replace(/\bpetrol[\s-]?(?:blue|green|grey|gray|colou?r(?:ed)?)\b/gi, ' ').replace(/\bparaffin\s+wax\b/gi, ' ');
+  if ((m = FLAMMABLE.exec(text2))) return { kind: 'flammable', type: 'a flammable liquid', word: m[0], level: 'definite' };
+  const abv = /(\d{1,2}(?:\.\d+)?)\s*%\s*(?:abv|vol|alc|alcohol)/i.exec(text);
+  if (abv && +abv[1] > 24) return { kind: 'flammable', type: 'a flammable liquid (spirits above 24% alcohol are classed as flammable for transport)', word: abv[0], level: 'definite' };
+  const NOT_DRINK = /\b(glass(?:es)?|tumblers?|decanters?|stones?|flasks?\s+empty|empty|barrel\s+(?:planter|table)|label|sign|poster|print|book|scented|candle|soap|chocolates?|truffles?|fudge|cake|marmalade|jam|tea|coffee|cufflinks?|t-?shirt|mug|coasters?|ice\s+cubes?|cocktail\s+(?:shaker|set|kit)|jigger|bar\s+tools?|optic|measure)\b/i;
+  if (!abv && (m = SPIRIT.exec(text)) && !NOT_DRINK.test(text) && !/\b(ginger|gingham|spirit\s+level|team\s+spirit|rum\s+(?:cake|fudge|truffles?))\b/i.test(text)) return { kind: 'flammable', type: 'spirits, usually above 24% alcohol and classed as a flammable liquid for transport', word: m[0], level: 'likely' };
   return null;
+}
+/* Things worth telling the seller about an item that are NOT rulebook failures. */
+function itemAdvisories(it) {
+  const out = [], raw = ((it.desc || '') + ' ' + (it.sku || ''));
+  if (BATTERY_WORD.test(raw) && NON_LI_CELL.test(raw) && !LI_EXPLICIT.test(raw)) out.push({ title: 'Batteries, but not lithium', what: (it.sku || 'This item') + ' is described as ' + NON_LI_CELL.exec(raw)[0] + ' batteries. R-06 only bans lithium, so this passes. Keep “' + NON_LI_CELL.exec(raw)[0] + '” in the description so the carrier doesn’t assume lithium.' });
+  const negHit = raw.match(NEG); if (!hazardOf(it) && negHit) { out.push({ title: 'Safe wording noticed', what: (it.sku || 'This item') + ' mentions “' + negHit[0] + '”, so it is not treated as restricted. Make sure the product really is ' + negHit[0].toLowerCase() + '.' }); }
+  const abv = /(\d{1,2}(?:\.\d+)?)\s*%\s*(?:abv|vol|alc|alcohol)/i.exec(raw);
+  if (abv && +abv[1] <= 24) out.push({ title: 'Alcohol below the flammable threshold', what: (it.sku || 'This item') + ' is ' + abv[0] + '. Drinks at 24% alcohol or less are not treated as flammable liquids, so R-06 passes. Excise paperwork still applies.' });
+  return out;
 }
 function hsInfo(v) {
   if (v === null || v === undefined || String(v).trim() === '') return { blank: true };
@@ -239,7 +277,8 @@ function evaluate(bIn, opts) {
   const b = san.b;
   const today = (opts && opts.todayISO) || todayISO();
   const items = b.items || [];
-  const issues = [], skipped = {};
+  const issues = [], skipped = {}, advisories = [];
+  const advise = (title, what) => advisories.push({ title, what });
   // Each issue says where it is: the booking, the SKU, and the spreadsheet row when the data came from a file.
   const add = (rule, sev, title, what, fix, item, src) => issues.push({ rule, sev, title, what, fix, item: item || null, bookingId: b.id || null,
     sheet: src ? (src._row ? 'Items' : null) : (b._row ? 'Bookings' : null), row: src ? (src._row || null) : (b._row || null) });
@@ -252,6 +291,25 @@ function evaluate(bIn, opts) {
   if (b._noId) add('INPUT', 'red', 'Input error: Booking ID', 'Bookings sheet, row ' + b._row + ' has no Booking ID. Add one and upload again.', 'Add a Booking ID to this row in the Bookings sheet, and the same ID to its rows in the Items sheet, then upload the file again. This row cannot be booked until then.');
   if (!items.length && !b._dupLater && !b._noId) data('No items found', 'This booking has no product lines in the Items sheet, so nothing can be checked against the invoice.', 'Add at least one product line with quantity, price and carton details.');
   if (rec.error) data('Route not supported', 'We can only book from the UK to Germany, France or the Netherlands. Destination country is “' + (b.destCountry || 'blank') + '”.', 'Use Germany, France or the Netherlands as the destination country.');
+  // Places and choices outside the lists we can book are reported as missing details, never passed over.
+  {
+    const oc = b.originCity ? ORIGINS.find(o => o.toLowerCase() === String(b.originCity).trim().toLowerCase()) : null;
+    if (!b.originCity) data('Collection city missing', 'The origin city is blank.', 'Use London, Manchester, Birmingham or Leeds.');
+    else if (!oc) data('Collection city not supported', 'We can only collect from London, Manchester, Birmingham and Leeds. “' + b.originCity + '” isn’t one of them, so this can’t be booked.', 'Use London, Manchester, Birmingham or Leeds.');
+    if (b.originCountry && !/^(united kingdom|uk|u\.k\.|gb|great britain|britain|england|scotland|wales)$/i.test(String(b.originCountry).trim())) data('Collection country not supported', 'We only collect in the United Kingdom. The origin country is “' + b.originCountry + '”.', 'Use United Kingdom.');
+    const dcKey = b.destCity ? Object.keys(DESTS).find(d => d.toLowerCase() === String(b.destCity).trim().toLowerCase()) : null;
+    if (!rec.error) {
+      if (!b.destCity) data('Delivery city missing', 'The destination city is blank.', 'Use ' + Object.keys(DESTS).filter(d => DESTS[d] === b.destCountry).join(', ') + '.');
+      else if (!dcKey) data('Delivery city not supported', 'We can only deliver to Berlin, Frankfurt, Hamburg, Paris, Lyon, Amsterdam and Rotterdam. “' + b.destCity + '” isn’t one of them, so this can’t be booked.', 'Use ' + Object.keys(DESTS).filter(d => DESTS[d] === b.destCountry).join(', ') + ' for ' + b.destCountry + '.');
+      else if (DESTS[dcKey] !== b.destCountry) data('Delivery city and country don’t match', dcKey + ' is in ' + DESTS[dcKey] + ', but the destination country is ' + b.destCountry + '.', 'Change the country to ' + DESTS[dcKey] + ', or pick a city in ' + b.destCountry + ' (' + Object.keys(DESTS).filter(d => DESTS[d] === b.destCountry).join(', ') + ').');
+    }
+    if (b._rawChoices) {
+      const rc = b._rawChoices;
+      if (rc.destType && !b.destType) data('Destination type not recognised', '“' + rc.destType + '” isn’t a destination type. It must be Warehouse or Business address.', 'Use Warehouse or Business address.');
+      if (rc.priority && !b.priority) data('Seller priority not recognised', '“' + rc.priority + '” isn’t one of the four priorities.', 'Use Cheapest, Fastest, Most reliable or Balanced.');
+      if (rc.appointment && !b.appointment) data('Delivery appointment not recognised', '“' + rc.appointment + '” isn’t Yes or No.', 'Enter Yes or No.');
+    }
+  }
   if ((b.pallets === null || b.pallets === undefined) && !b._bad.pallets) data('Pallet count missing', 'Number of pallets is blank, so weight per pallet and price can’t be worked out.', 'Enter how many pallets the shipment is on.');
   if (typeof b.grossWeight !== 'number' && !b._bad.grossWeight) data('Gross weight missing', 'Total gross weight is blank or not a number.', 'Enter the total weight of everything shipped, including cartons and pallets.');
   const itemMiss = [];
@@ -283,12 +341,19 @@ function evaluate(bIn, opts) {
   const sumWt = items.reduce((s, i) => s + (i.qty || 0) * (i.unitWeight || 0), 0);
 
   // R-01 HS code
-  items.forEach(it => {
+  items.forEach((it, idx) => {
     const h = hsInfo(it.hs);
     if (h.blank) add('R-01', 'red', 'HS code missing', label(it) + ' has no HS code. Customs can’t classify it, so it is likely to be held.', 'Look the product up in the UK Trade Tariff (gov.uk/trade-tariff) and enter at least the first 6 digits.', it.sku, it);
     else if (h.zeros) add('R-01', 'red', 'HS code is all zeros', (it.sku || 'This item') + ' has the HS code “' + h.raw + '”, which is all zeros. Enter a real code of at least 6 digits from the UK Trade Tariff.', 'Look the product up in the UK Trade Tariff (gov.uk/trade-tariff) and enter a real code of at least 6 digits.', it.sku, it);
     else if (!h.valid) add('R-01', 'red', 'HS code isn’t a number', label(it) + ' has the HS code “' + h.raw + '”, which contains characters other than digits.', 'Enter digits only, at least 6 (for example 691200).', it.sku, it);
-    else if (h.digits.length < 6) add('R-01', 'red', 'HS code too short', label(it) + ' has the HS code “' + h.raw + '” with only ' + h.digits.length + ' digits. At least 6 are required.' + (h.digits.length === 5 ? ' A leading zero may have been dropped (for example 090111 saved as 90111).' : ''), 'Replace it with the full code (6 digits or more) from the UK Trade Tariff.' + (h.digits.length === 5 ? ' Format the HS code column as text so leading zeros stay.' : ''), it.sku, it);
+    else if (h.digits.length < 6) {
+      const lz = h.numeric && h.digits.length === 5;
+      add('R-01', 'red', lz ? 'HS code lost its leading zero' : 'HS code too short',
+        label(it) + ' has the HS code “' + h.raw + '” with only ' + h.digits.length + ' digit' + (h.digits.length === 1 ? '' : 's') + '. At least 6 are required.'
+          + (lz ? ' It was stored as a number, so a leading 0 was probably dropped: 0' + h.digits + ' is likely what was meant. Codes for food and drink (chapters 01 to 09) all start with a zero.' : (h.digits.length === 5 ? ' A leading zero may have been dropped (for example 090111 saved as 90111).' : '')),
+        lz ? 'Change it to 0' + h.digits + ' (check it in the UK Trade Tariff) and format the HS code column as text so the zero stays.' : 'Replace it with the full code (6 digits or more) from the UK Trade Tariff.' + (h.digits.length === 5 ? ' Format the HS code column as text so leading zeros stay.' : ''), it.sku, it);
+      if (lz) issues[issues.length - 1].autofix = { label: 'Use 0' + h.digits, item: idx, set: { hs: '0' + h.digits } };
+    }
   });
 
   // R-02 declared value (compared in whole pence; up to and including exactly 1% of the items total passes)
@@ -325,39 +390,57 @@ function evaluate(bIn, opts) {
     'The booking says ' + b.cartons + ' cartons, but the items add up to ' + sumCartons + '. Labels and counts at the warehouse won’t match the declaration.',
     'Set total cartons to ' + sumCartons + ', or add the missing ' + Math.abs(b.cartons - sumCartons) + ' carton' + (Math.abs(b.cartons - sumCartons) === 1 ? '' : 's') + ' to the item lines if ' + b.cartons + ' is right.');
 
-  // R-05 weight per pallet against the carrier in use. Passes when the recommended carrier can take the load;
-  // Red only when no carrier can, or when the user has picked one that can't.
+  // R-05 weight per pallet against the carrier in use: the one the seller picked, otherwise the one their priority points at
+  // (ignoring weight). Red when that carrier cannot take it, with the fixes priced: switch carrier, or add pallets.
   const sel = rec.selected;
+  const last = () => issues[issues.length - 1];
   if (!sel || rec.wpp === null) skipped['R-05'] = 1;
   else if (!sel.eligible) {
-    const fixes = [];
-    const nP = rec.pallets;
+    const nP = rec.pallets, over = rec.wpp - sel.maxKg, fixes = [];
+    const keepN = sel.minPallets, keepCost = sel.minCost;
+    if (rec.recommended) fixes.push('Switch to ' + rec.recommended.carrier + ' (' + rec.recommended.service + '), which takes up to ' + rec.recommended.maxKg + ' kg per pallet: ' + gbp(rec.recommended.price * nP) + ' for ' + plu(nP, 'pallet') + '.');
+    if (rec.recommended) fixes.push('Or keep ' + sel.carrier + ' and spread the load over ' + plu(keepN, 'pallet') + ' (' + gbp(keepCost) + ', ' + nf(rec.gw / keepN) + ' kg each).');
+    const best = rec.options.slice().sort((x, y) => x.minCost - y.minCost || x.transit - y.transit)[0];
+    let extra;
     if (rec.recommended) {
-      fixes.push('Switch to ' + rec.recommended.carrier + ' (' + rec.recommended.service + '), which takes up to ' + rec.recommended.maxKg + ' kg per pallet: ' + gbp(rec.recommended.price * nP) + ' for ' + plu(nP, 'pallet') + '.');
-      fixes.push('Or keep ' + sel.carrier + ' and spread the load over ' + plu(sel.minPallets, 'pallet') + ' (' + gbp(sel.minCost) + ', ' + nf(rec.gw / sel.minPallets) + ' kg each).');
+      const sw = rec.recommended.price * nP;
+      fixes.push(sw <= keepCost ? 'Switching is the cheaper fix (' + gbp(keepCost - sw) + ' less).' : 'Re-palletising is the cheaper fix (' + gbp(sw - keepCost) + ' less), but it means repacking.');
+      extra = { autofix: { label: 'Switch to ' + rec.recommended.carrier, set: { _carrier: rec.recommended.carrier } }, autofix2: { label: 'Use ' + keepN + ' pallets with ' + sel.carrier, set: { pallets: keepN, _carrier: sel.carrier } } };
     } else {
       fixes.push('Split the load over more pallets. ' + rec.options.slice().sort((x, y) => x.minCost - y.minCost || x.minPallets - y.minPallets).map(o => o.carrier + ' needs ' + plu(o.minPallets, 'pallet') + ' (' + gbp(o.minCost) + ', ' + nf(rec.gw / o.minPallets) + ' kg each)').join('; ') + '.');
+      fixes.push('Switching carrier cannot fix this: no carrier on this route takes ' + nf(rec.wpp) + ' kg per pallet (the highest limit is ' + Math.max.apply(null, rec.options.map(o => o.maxKg)) + ' kg). Cheapest way to make it fit: ' + best.carrier + ' on ' + plu(best.minPallets, 'pallet') + ' (' + gbp(best.minCost) + ').');
+      extra = { autofix: { label: 'Use ' + best.minPallets + ' pallets with ' + best.carrier, set: { pallets: best.minPallets, _carrier: best.carrier } } };
     }
-    const maxLimit = Math.max.apply(null, rec.options.map(o => o.maxKg));
     add('R-05', 'red', rec.recommended ? 'Pallets too heavy for ' + sel.carrier : 'Pallets too heavy for every carrier on this route',
-      'Weight per pallet is ' + nf(rec.wpp) + ' kg (' + nf(rec.gw) + ' kg ÷ ' + plu(nP, 'pallet') + '). ' + (rec.recommended ? sel.carrier + ' (' + sel.service + ') accepts at most ' + sel.maxKg + ' kg per pallet, so this is ' + nf(rec.wpp - sel.maxKg) + ' kg over.' : 'No carrier on this route accepts more than ' + maxLimit + ' kg per pallet, so this is ' + nf(rec.wpp - maxLimit) + ' kg over the highest limit.') + ' The carrier is likely to refuse or re-price the pallets.',
+      nf(rec.wpp) + ' kg per pallet; ' + sel.carrier + ' (' + (b._carrier ? 'your choice' : rec.priority.toLowerCase()) + ') takes max ' + sel.maxKg + ' kg. That is ' + nf(rec.gw) + ' kg ÷ ' + plu(nP, 'pallet') + ', ' + nf(over) + ' kg over the limit, so the carrier is likely to refuse or re-price the pallets.',
       fixes.join(' '));
+    Object.assign(last(), extra);
   }
 
-  // R-06 dangerous goods
+  // R-06 dangerous goods: one finding per offending item, each removable on its own
   items.forEach(it => {
     const hz = hazardOf(it);
-    if (hz) add('R-06', 'red', 'Restricted goods', label(it) + ' looks like ' + hz.type + ' (matched “' + hz.word + '”). Lithium batteries, aerosols and flammable liquids can’t go as ordinary freight.', 'Remove this item from the booking, or ship it separately with a carrier approved for dangerous goods. If it is not actually restricted (for example battery-free), correct the description.', it.sku, it);
+    if (hz) add('R-06', 'red', hz.kind === 'lithium' ? 'Lithium battery goods' : hz.kind === 'aerosol' ? 'Aerosol' : 'Flammable liquid',
+      label(it) + (hz.level === 'definite' ? ' is ' : ' looks like ') + hz.type + ' (from “' + hz.word + '” in the description). Lithium batteries, aerosols and flammable liquids can’t travel as ordinary road freight, and an undeclared one can get the whole shipment stopped.',
+      'Remove this item from the booking, or ship it separately with a carrier approved for dangerous goods.' + (hz.level === 'likely' ? ' If it really contains no ' + (hz.kind === 'lithium' ? 'lithium battery (for example it uses alkaline AA cells or is battery-free)' : 'flammable liquid') + ', say so in the description and this clears.' : ''), it.sku, it);
+    itemAdvisories(it).forEach(a => advise(a.title, a.what));
   });
 
   // R-07 gross weight not below the sum of the items
   if (noItems || typeof b.grossWeight !== 'number' || !has('qty') || !has('unitWeight')) skipped['R-07'] = 1;
   else if (b.grossWeight < sumWt - 1e-9) {
+    const huge = sumWt > 0 && b.grossWeight > 0 && sumWt / b.grossWeight > 50;
     let extra = '';
     if (b.pallets > 0 && sel && sumWt / b.pallets > sel.maxKg) extra = ' Heads up: at ' + nf(sumWt) + ' kg the load would be ' + nf(sumWt / b.pallets) + ' kg per pallet, above ' + sel.carrier + '’s ' + sel.maxKg + ' kg limit.';
+    if (extra && !huge) {
+      const fit = rec.options.filter(o => sumWt / b.pallets <= o.maxKg + 1e-9);
+      const alt = fit.length ? rankBy(fit, rec.priority)[0] : null;
+      advise('Correcting the weight changes the carrier', 'At the real weight (' + nf(sumWt) + ' kg or more) ' + sel.carrier + ' can no longer take the pallets. ' + (alt ? alt.carrier + ' would be the best fit for “' + rec.priority + '” at ' + gbp(alt.price * b.pallets) + '.' : 'No carrier would fit on ' + b.pallets + ' pallets, so more pallets would be needed.'));
+    }
     add('R-07', 'amber', 'Gross weight is lower than the goods alone',
-      'Total gross weight is ' + nf(b.grossWeight) + ' kg, but the items alone weigh ' + nf(sumWt) + ' kg (unit weight × quantity), before cartons and pallets. Under-declaring weight leads to carrier surcharges.',
-      'Raise the gross weight to at least ' + nf(sumWt) + ' kg (the expected minimum); with cartons and pallets it will usually be higher.' + extra);
+      'Total gross weight is ' + nf(b.grossWeight) + ' kg, but the items alone weigh ' + nf(sumWt) + ' kg (unit weight × quantity), before cartons and pallets. Under-declaring weight leads to carrier surcharges.' + (huge ? ' The gap is huge, so check whether unit weights were entered in grams instead of kg.' : ''),
+      huge ? 'Check the unit weights first: if they are in grams, divide them by 1,000 (350 becomes 0.35). Otherwise raise the gross weight to at least ' + nf(sumWt) + ' kg.'
+        : 'Raise the gross weight to at least ' + nf(sumWt) + ' kg (the expected minimum); with cartons and pallets it will usually be higher.' + extra);
   }
 
   // R-08 delivery appointment
@@ -375,6 +458,8 @@ function evaluate(bIn, opts) {
   else if (b.readyDate < today) {
     const ago = diffDays(b.readyDate, today);
     add('R-10', 'amber', 'Ready date is in the past', 'The ready to ship date is ' + niceDate(b.readyDate) + ', which was ' + ago + ' day' + (ago === 1 ? '' : 's') + ' ago (today is ' + niceDate(today) + '). A carrier can’t collect in the past.', 'Choose today (' + dmy(today) + ') or a later date.');
+    const us = monthFirstReading(b.readyDateRaw, today);
+    if (us) last().what += ' The text “' + String(b.readyDateRaw).trim() + '” is read day-first; read month-first (MM-DD-YYYY) it would be ' + niceDate(us) + ', which is in the future. If that is what you meant, enter it as DD-MM-YYYY (' + dmy(us) + ').';
   }
 
   const order = { red: 0, amber: 1 };
@@ -387,7 +472,7 @@ function evaluate(bIn, opts) {
     ruleStatus[r.id] = hit ? hit.sev : (skipped[r.id] ? 'na' : 'pass');
   });
   const status = counts.red ? 'blocked' : counts.amber ? 'warning' : 'clear';
-  return { issues, rec, counts, status, ruleStatus, calc: { sumVal, sumCartons, sumWt, wpp: rec.wpp }, today };
+  return { issues, advisories, rec, counts, status, ruleStatus, calc: { sumVal, sumCartons, sumWt, wpp: rec.wpp }, today };
 }
 
 /* ---------- Plain-language confirmation ---------- */
@@ -449,6 +534,9 @@ const missingCols = (heads, spec) => spec.filter(([, alts]) => !alts.some(a => h
 const pick = (r, ...keys) => { for (const k of keys) if (k in r) return r[k]; return null; };
 
 // A Booking ID is trimmed and shown upper-case ("  bk-002 " is BK-002). Matching between sheets uses the same form, so it is case-insensitive.
+const idKey = id => String(id).toLowerCase().replace(/[\s_\-.]+/g, '');      // "bk324", "BK 324" and "BK-324" are the same booking
+const NOTE_ID = /^(totals?|sub-?totals?|grand\s*total|sum|average|count|notes?\b|n\.?b\.?\b|remarks?|comments?)/i;
+const isNoteRow = (r, idv, keyCols) => !!idv && (NOTE_ID.test(idv) || (!/\d/.test(idv) && idv.split(' ').length >= 3) || (idv.split(' ').length >= 4 && keyCols.every(k => r[k] === null || r[k] === undefined || String(r[k]).trim() === '')));
 const normId = v => { const t = clean(v); return t === null ? '' : t.replace(/\s+/g, ' ').toUpperCase(); };
 function bookingsFromTables(bookingRows, itemRows, opts) {
   opts = opts || {};
@@ -462,22 +550,29 @@ function bookingsFromTables(bookingRows, itemRows, opts) {
   }
   const bookings = [];
   bt.forEach(r => {
-    const id = normId(r['booking id']);   // a row with data but no ID is kept, flagged Red, and never silently dropped
+    const id = normId(r['booking id']);
+    const place = (v, list) => { const t = clean(v); return t === null ? null : (list.find(x => x.toLowerCase() === t.toLowerCase()) || t); };
+    const country = v => { const t = clean(v); if (t === null) return null; const k = t.toLowerCase().replace(/[.\s]/g, ''); return ({ uk: 'United Kingdom', gb: 'United Kingdom', greatbritain: 'United Kingdom', britain: 'United Kingdom', england: 'United Kingdom', unitedkingdom: 'United Kingdom', de: 'Germany', deutschland: 'Germany', germany: 'Germany', fr: 'France', france: 'France', nl: 'Netherlands', holland: 'Netherlands', thenetherlands: 'Netherlands', netherlands: 'Netherlands' })[k] || t; };
+    if (isNoteRow(r, id, ['seller name', 'destination country', 'pallets']) || (!id && ['seller name', 'destination city', 'destination country', 'pallets', 'cartons'].every(k => r[k] === null || r[k] === undefined || String(r[k]).trim() === ''))) {
+      warnings.push('Bookings sheet, row ' + r._row + (id ? ' (“' + id.slice(0, 40) + (id.length > 40 ? '…' : '') + '”)' : '') + ' is a note or total, not a booking, so it was skipped.');
+      return;
+    }   // a row with data but no ID is kept, flagged Red, and never silently dropped
     const prRaw = clean(pickKey(r, 'seller priority'));
     const pr = PRIORITIES.find(p => prRaw && p.toLowerCase() === prRaw.toLowerCase());
     const dtRaw = clean(pickKey(r, 'destination type'));
     const apRaw = clean(pickKey(r, 'delivery appointment booked', 'delivery appointment'));
     const b = {
-      id, _noId: !id, _row: r._row, seller: clean(r['seller name']), originCity: clean(r['origin city']), originCountry: clean(r['origin country']),
-      destCity: clean(r['destination city']), destCountry: clean(r['destination country']),
-      destType: dtRaw ? (/ware/i.test(dtRaw) ? 'Warehouse' : 'Business address') : null,
+      id, _noId: !id, _row: r._row, seller: clean(r['seller name']), originCity: place(r['origin city'], ORIGINS), originCountry: country(r['origin country']),
+      destCity: place(r['destination city'], Object.keys(DESTS)), destCountry: country(r['destination country']),
+      destType: dtRaw ? (/^warehouse$/i.test(dtRaw) ? 'Warehouse' : /^business(?:\s+address)?$/i.test(dtRaw) ? 'Business address' : null) : null,
       readyDate: parseDate(r['ready to ship date']), readyDateRaw: r['ready to ship date'],
       priority: pr || null, priorityRaw: prRaw,
       _raw: { pallets: r['pallets'], cartons: r['cartons'], declaredValue: pick(r, 'total declared value', 'declared value'), grossWeight: pick(r, 'total gross weight kg', 'total gross weight', 'gross weight kg', 'gross weight') },
       pallets: num(r['pallets']), cartons: num(r['cartons']), declaredValue: num(pick(r, 'total declared value', 'declared value')),
       currency: clean(r['currency']) || 'GBP', grossWeight: num(pick(r, 'total gross weight kg', 'total gross weight', 'gross weight kg', 'gross weight')),
-      appointment: apRaw && /^(y|yes|true|1)$/i.test(apRaw) ? 'Yes' : 'No', items: []
+      appointment: apRaw && /^(y|yes|true|1)$/i.test(apRaw) ? 'Yes' : (!apRaw || /^(n|no|false|0)\b/i.test(apRaw)) ? 'No' : null, items: []
     };
+    if ((dtRaw && !b.destType) || (prRaw && !b.priority) || (apRaw && !b.appointment)) b._rawChoices = { destType: dtRaw && !b.destType ? dtRaw : null, priority: prRaw && !b.priority ? prRaw : null, appointment: apRaw && !b.appointment ? apRaw : null };
     // Optional extra column written by corrected files: keeps a carrier the user chose. Absent in the standard template,
     // in which case R-05 uses the recommended carrier for the seller's priority.
     const carRaw = clean(pickKey(r, 'chosen carrier'));
@@ -490,18 +585,19 @@ function bookingsFromTables(bookingRows, itemRows, opts) {
   bookings.forEach((b, i) => {
     b._uid = i;
     if (b._noId) return;
-    const k = b.id.toLowerCase();
+    const k = idKey(b.id);
     (seenRows[k] = seenRows[k] || []).push(b._row);
     if (!byId[k]) byId[k] = b; else b._dupLater = true;
   });
-  bookings.forEach(b => { if (b._noId) return; const rows = seenRows[b.id.toLowerCase()]; if (rows.length > 1) { b._dupCount = rows.length; b._dupRows = rows; } });
+  bookings.forEach(b => { if (b._noId) return; const rows = seenRows[idKey(b.id)]; if (rows.length > 1) { b._dupCount = rows.length; b._dupRows = rows; } });
   const dupIds = Object.keys(seenRows).filter(k => seenRows[k].length > 1);
   dupIds.forEach(k => warnings.push('Booking ID “' + byId[k].id + '” appears ' + seenRows[k].length + ' times in the Bookings sheet (rows ' + seenRows[k].join(', ') + '). Each copy is flagged, and its items are linked to the first one.'));
   const orphan = {};
   it.forEach(r => {
     const id = normId(r['booking id']);
+    if (isNoteRow(r, id, ['sku', 'description', 'hs code', 'quantity units'])) { warnings.push('Items sheet, row ' + r._row + ' (“' + id.slice(0, 40) + (id.length > 40 ? '…' : '') + '”) is a note or total, not an item, so it was skipped.'); return; }
     if (!id) { warnings.push('Items sheet, row ' + r._row + ' has no Booking ID, so it was ignored.'); return; }
-    const b = byId[id.toLowerCase()];
+    const b = byId[idKey(id)];
     const item = {
       _row: r._row,
       _raw: { qty: pick(r, 'quantity units', 'quantity'), price: r['unit price'], upc: r['units per carton'], cartons: r['cartons'], unitWeight: pick(r, 'unit weight kg', 'unit weight') },
