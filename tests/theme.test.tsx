@@ -21,13 +21,15 @@ const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((
 // Every foreground/background pairing the stylesheet actually uses for text.
 const PAIRS: [string, string][] = [
   ['ink', 'canvas'], ['ink', 'paper'], ['ink', 'paper2'], ['ink2', 'canvas'], ['ink2', 'paper'], ['ink2', 'paper2'], ['ink3', 'canvas'], ['ink3', 'paper'], ['ink3', 'paper2'],
-  ['brand-ink', 'brand'], ['brand-ink', 'brand-hover'], ['brand', 'paper'], ['brand', 'paper2'], ['brand', 'brand-soft'], ['ink', 'brand-soft'],
-  ['red', 'red-bg'], ['amber', 'amber-bg'], ['green', 'green-bg'], ['red', 'paper'], ['amber', 'paper'], ['green', 'paper'], ['red', 'paper2'], ['ink', 'red-bg'], ['ink', 'amber-bg'], ['ink', 'green-bg'],
+  ['brand-ink', 'brand'], ['brand-ink', 'brand-hover'], ['lav-ink', 'lav'], ['link', 'canvas'], ['link', 'paper'], ['link', 'paper2'], ['link', 'brand-soft'], ['ink', 'brand-soft'],
+  ['red', 'red-bg'], ['amber', 'amber-bg'], ['green', 'green-bg'], ['red', 'paper'], ['amber', 'paper'], ['green', 'paper'], ['red', 'paper2'], ['red', 'canvas'], ['amber', 'canvas'], ['green', 'canvas'],
+  ['ink', 'red-bg'], ['ink', 'amber-bg'], ['ink', 'green-bg'],
 ];
 
 describe.each([['light', light], ['dark (system setting)', darkMedia], ['dark (chosen)', darkAttr]] as const)('%s theme', (_name, t) => {
   it('defines every token', () => {
-    for (const k of ['ink', 'ink2', 'ink3', 'canvas', 'paper', 'paper2', 'line', 'brand', 'brand-hover', 'brand-ink', 'brand-soft', 'red', 'red-bg', 'amber', 'amber-bg', 'green', 'green-bg', 'glow', 'tile-all', 'tile-red', 'tile-amber', 'tile-green', 'tile-booked']) expect(t[k], k).toMatch(/^#[0-9a-f]{6}$/i);
+    for (const k of ['ink', 'ink2', 'ink3', 'canvas', 'paper', 'paper2', 'line', 'edge', 'hard', 'ruling', 'brand', 'brand-hover', 'brand-ink', 'brand-soft', 'link', 'lav', 'lav-ink',
+      'red', 'red-bg', 'amber', 'amber-bg', 'green', 'green-bg', 'tile-all', 'tile-red', 'tile-amber', 'tile-green', 'tile-booked']) expect(t[k], k).toMatch(/^#[0-9a-f]{6}$/i);
   });
   it.each(PAIRS)('%s on %s has at least 4.5:1 contrast (WCAG AA)', (fg, bg) => {
     expect(ratio(t[fg], t[bg])).toBeGreaterThanOrEqual(4.5);
@@ -38,20 +40,33 @@ describe.each([['light', light], ['dark (system setting)', darkMedia], ['dark (c
     expect(['#000000', '#ffffff']).toContain(fg.toLowerCase());
     expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
   });
-  it('every filled tile stands out from the card it sits on (at least 3:1 on its edge or fill)', () => {
-    for (const name of ['red', 'amber', 'green', 'booked']) {
-      const edge = name === 'amber' ? t['tile-amber-edge'] : t['tile-' + name];
-      expect(ratio(edge, t.paper), name).toBeGreaterThanOrEqual(3);
-    }
+  it('the outline colour stands out from the cards (3:1), so the 2px outlines and hard shadows are visible', () => {
+    expect(ratio(t.edge, t.paper)).toBeGreaterThanOrEqual(3);
+    expect(ratio(t.edge, t.canvas)).toBeGreaterThanOrEqual(3);
   });
-  it('has a visible border against the page', () => {
+  it('has a visible divider against the page', () => {
     expect(ratio(t.line, t.paper)).toBeGreaterThanOrEqual(1.1);
+  });
+});
+
+// The status colours are part of the product's meaning, so a restyle must not move them.
+describe('red, amber and green are unchanged by the restyle', () => {
+  const LOCKED = {
+    light: { red: '#b3261e', 'red-bg': '#fdecea', amber: '#85500a', 'amber-bg': '#fff1cc', green: '#0d7440', 'green-bg': '#e1f5e9', 'tile-red': '#c0261c', 'tile-red-text': '#ffffff', 'tile-amber': '#f5b301', 'tile-amber-text': '#000000', 'tile-green': '#0e7c45', 'tile-green-text': '#ffffff' },
+    dark: { red: '#ff8f86', 'red-bg': '#3b181b', amber: '#f7bd55', 'amber-bg': '#3a2b0c', green: '#5fd69a', 'green-bg': '#0e3323', 'tile-red': '#ff8277', 'tile-red-text': '#000000', 'tile-amber': '#f7bd55', 'tile-amber-text': '#000000', 'tile-green': '#52d08e', 'tile-green-text': '#000000' },
+  };
+  it.each(Object.entries(LOCKED.light))('light %s', (k, v) => expect(light[k]).toBe(v));
+  it.each(Object.entries(LOCKED.dark))('dark %s (both dark blocks)', (k, v) => { expect(darkMedia[k]).toBe(v); expect(darkAttr[k]).toBe(v); });
+  it('the rulebook panel keeps the same status colours as dark mode', () => {
+    const ref = tokens(block('whichever theme is on. */'));
+    for (const k of ['red', 'red-bg', 'amber', 'amber-bg', 'green', 'green-bg']) expect(ref[k]).toBe(LOCKED.dark[k as keyof typeof LOCKED.dark]);
   });
 });
 
 describe('the two dark blocks cannot drift apart', () => {
   it('"system dark" and "chosen dark" use identical colours', () => expect(darkMedia).toEqual(darkAttr));
   it('light and dark are genuinely different', () => { expect(light.canvas).not.toBe(darkAttr.canvas); expect(lum(light.canvas)).toBeGreaterThan(lum(darkAttr.canvas)); });
+  it('the lavender header band is the same in both themes (it is the brand colour)', () => { expect(css).toMatch(/\.hero \{[^}]*background: #b09cfb/); });
 });
 
 describe('the theme switch (Light and Dark only)', () => {

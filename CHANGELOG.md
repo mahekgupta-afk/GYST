@@ -131,6 +131,23 @@ Tests: `tests/messy.test.tsx` builds a deliberately messy .xlsx and asserts the 
 
 The summary tiles (All, Red, Amber, Green, Booked) are now filled with their status colour, with plain black or white text chosen for contrast: white on red, green, blue (booked) and the dark "All" tile in light mode, black on amber, and black on all of them in dark mode. The selected tile gets a two-tone ring that does not rely on colour. `tests/theme.test.tsx` checks that the text on every tile is exactly black or white with at least 4.5:1 contrast in both themes, and that each filled tile stands out from the card behind it (the amber tile gets a darker edge in light mode because a bright yellow on white is hard to see otherwise).
 
+## Claymorphic comic ledger restyle
+
+Restyled from the "Claymorphic Comic Ledger" design brief, in both Light and Dark. Red, amber and green (the status colours, the rule chips, the stamp and the red/amber/green tile fills) are exactly as before; `tests/theme.test.tsx` now locks their values.
+
+- **Look.** Thick 2px outlines and hard offset shadows with no blur on cards, buttons, chips, tiles and bubbles. Cards 16px round, buttons 12px. Buttons press down on click. Lavender (#B09CFB) and coral (#FFBE98) are the brand colours; coral is kept for the main actions only. Mint was left out because it would read as the status green.
+- **Header.** A lavender band with a squared, outlined nav bar (logo, theme switch, date), a big title and a wavy drop into the page. The band is the same in both themes. In dark mode it sits above a near-black page with lavender-outlined cards.
+- **Type.** Gasoek One (the brief's display face) only for headlines, the stamp and big numerals; Geist for all other text.
+- **Rulebook panel.** Shown as the dark "ledger" register (near-black with a lavender outline) in both themes.
+- **Chat.** Ruled-paper background, lavender bubbles for the user, outlined white bubbles for the assistant, pill suggestion chips.
+- **Tiles and tables.** Status tiles keep their fills and gain outlines and a lift when selected; the "Booked" tile is lavender; table header rows are lavender.
+- **Still true.** The message box is on screen when the page opens (the chat panel height now follows the measured header height), no sideways scrolling on a phone, and every text pair still passes WCAG AA in both themes.
+
+### Not changed, and why
+- The brief's 125px display size and 64px section padding are scaled down: the app is a tool, and the chat box has to stay on screen when the page opens.
+- The brief's wavy transitions and light/lavender/dark section rhythm are used once (header to page, and the dark rulebook panel) rather than between every section, because the results screens are dense working views.
+- The faint grid and aurora background effects were not added; they would sit behind small text.
+
 ## Not changed, and why
 
 - **No inline "edit description" fix for R-06.** Editing a description to dodge the restricted-goods check would defeat the rule. Removing the item is the only inline fix.

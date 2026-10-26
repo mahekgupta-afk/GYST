@@ -55,6 +55,17 @@ export default function App() {
     fetchJson('/api/parse-message').then(({ json }) => { if (json && json.enabled) { setAiOn(true); } }).catch(() => {});
   }, [greet]);
 
+  // The chat panel is sized to the space left under the header, so the message box is on screen when the page opens.
+  useEffect(() => {
+    const hero = document.querySelector('.hero') as HTMLElement | null;
+    if (!hero) return;
+    const set = () => document.documentElement.style.setProperty('--chrome', Math.ceil(hero.getBoundingClientRect().height) + 28 + 'px');
+    set();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(set);
+    ro.observe(hero);
+    return () => ro.disconnect();
+  }, []);
   useEffect(() => { const el = logEl.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs]);
   // Grow with the text. An empty box keeps its natural height (measuring it at page load could leave it stuck at the maximum).
   useEffect(() => { const t = inputEl.current; if (!t) return; if (!input) { t.style.height = ''; return; } t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; }, [input]);
@@ -285,22 +296,28 @@ export default function App() {
   const lastIdx = msgs.length - 1;
 
   return (
-    <div className="app">
-      <header className="top">
-        <div className="brandrow">
-          <span className="logo" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></svg>
-          </span>
-          <div>
-            <h1 className="brand">Get Your Ship Together</h1>
-            <p className="tag">Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against the rulebook before it leaves.</p>
-          </div>
+    <>
+      <header className="hero">
+        <div className="hero-in">
+          <nav className="nav" aria-label="App">
+            <div className="brandrow">
+              <span className="logo" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></svg>
+              </span>
+              <span className="wordmark">UK to EU shipments</span>
+            </div>
+            <div className="topside">
+              <ThemeToggle />
+              <div className="today">{today}</div>
+            </div>
+          </nav>
+          <h1 className="brand">Get Your Ship Together</h1>
+          <p className="tag">Book a UK to EU shipment by chat or by uploading your sheets. Every booking is checked against the rulebook before it leaves.</p>
         </div>
-        <div className="topside">
-          <ThemeToggle />
-          <div className="today">{today}</div>
-        </div>
+        <svg className="wave" viewBox="0 0 1440 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0,0 C180,38 360,38 540,20 C720,2 900,2 1080,20 C1260,38 1350,34 1440,18 L1440,40 L0,40 Z" /></svg>
       </header>
+
+      <div className="app">
 
       <main className="grid">
         <section className="card left" aria-label="Start a booking">
@@ -384,6 +401,7 @@ export default function App() {
         </div>
       </details>
       <p className="foot">Checks run in the browser using fixed rules, so the same booking always gets the same result. Delivery dates are estimates based on calendar days in transit.</p>
-    </div>
+      </div>
+    </>
   );
 }
