@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import React from 'react';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import ThemeToggle from '../components/ThemeToggle';
-import { applyTheme, readTheme, themeInitScript, THEME_KEY } from '../lib/theme';
+import { applyTheme, readTheme, effectiveTheme, themeInitScript, THEME_KEY } from '../lib/theme';
 
 const css = readFileSync('app/globals.css', 'utf8');
 const block = (start: string) => { const i = css.indexOf(start); const j = css.indexOf('}', i); return css.slice(i, j); };
@@ -42,11 +42,19 @@ describe('the two dark blocks cannot drift apart', () => {
   it('light and dark are genuinely different', () => { expect(light.canvas).not.toBe(darkAttr.canvas); expect(lum(light.canvas)).toBeGreaterThan(lum(darkAttr.canvas)); });
 });
 
-describe('the theme switch', () => {
-  beforeEach(() => { localStorage.clear(); document.documentElement.removeAttribute('data-theme'); });
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+describe('the theme switch (Light and Dark only)', () => {
+  const matchMedia = (dark: boolean) => vi.stubGlobal('matchMedia', (q: string) => ({ matches: dark && q.includes('dark'), media: q, addEventListener() {}, removeEventListener() {} }));
+  beforeEach(() => { localStorage.clear(); document.documentElement.removeAttribute('data-theme'); matchMedia(false); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  const pressed = () => screen.getAllByRole('button').filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent);
 
-  it('Dark sets data-theme="dark" and remembers it; Light sets "light"; System removes it and forgets', () => {
+  it('has exactly two buttons, Light and Dark, and no System option', () => {
+    render(<ThemeToggle />);
+    expect(screen.getAllByRole('button').map(b => b.textContent)).toEqual(['Light', 'Dark']);
+    expect(screen.queryByText(/System/)).toBeNull();
+    expect(screen.getByRole('group', { name: 'Colour theme' })).toBeTruthy();
+  });
+  it('Dark sets data-theme="dark" and remembers it; Light sets "light"', () => {
     applyTheme('dark');
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(localStorage.getItem(THEME_KEY)).toBe('dark');
@@ -54,56 +62,59 @@ describe('the theme switch', () => {
     applyTheme('light');
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
     expect(readTheme()).toBe('light');
-    applyTheme('system');
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-    expect(localStorage.getItem(THEME_KEY)).toBeNull();
-    expect(readTheme()).toBe('system');
   });
-  it('ignores a corrupted saved value', () => {
-    localStorage.setItem(THEME_KEY, 'purple');
-    expect(readTheme()).toBe('system');
+  it('before anything is saved the page follows the device, and the matching button is marked', () => {
+    matchMedia(true);
+    expect(readTheme()).toBeNull();
+    expect(effectiveTheme()).toBe('dark');
+    render(<ThemeToggle />);
+    expect(pressed()).toEqual(['Dark']);
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);   // CSS follows the device until a choice is made
+    cleanup();
+    matchMedia(false);
+    render(<ThemeToggle />);
+    expect(pressed()).toEqual(['Light']);
+  });
+  it('a saved choice beats the device setting', () => {
+    matchMedia(true);
+    localStorage.setItem(THEME_KEY, 'light');
+    expect(effectiveTheme()).toBe('light');
+    render(<ThemeToggle />);
+    expect(pressed()).toEqual(['Light']);
+  });
+  it('ignores a corrupted saved value, including the old "system" value', () => {
+    for (const bad of ['purple', 'system', '']) { localStorage.setItem(THEME_KEY, bad); expect(readTheme()).toBeNull(); }
   });
   it('still applies the theme when browser storage is blocked, and never throws', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
     expect(() => applyTheme('dark')).not.toThrow();
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(readTheme()).toBe('system');
+    expect(readTheme()).toBeNull();
+    expect(effectiveTheme()).toBe('light');
     expect(() => new Function(themeInitScript)()).not.toThrow();      // the no-flash script is safe too
   });
-  it('the head script applies the saved theme before the page renders, and ignores anything else', () => {
+  it('the head script applies a saved theme before the page renders, and ignores anything else', () => {
     localStorage.setItem(THEME_KEY, 'dark');
     new Function(themeInitScript)();
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     document.documentElement.removeAttribute('data-theme');
-    localStorage.setItem(THEME_KEY, 'bogus');
-    new Function(themeInitScript)();
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    for (const bad of ['bogus', 'system']) { localStorage.setItem(THEME_KEY, bad); new Function(themeInitScript)(); expect(document.documentElement.hasAttribute('data-theme')).toBe(false); }
   });
-  it('the buttons switch the page and show which one is selected', () => {
+  it('clicking a button switches the page and moves the highlight', () => {
     render(<ThemeToggle />);
-    const pressed = () => screen.getAllByRole('button').filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent);
-    expect(pressed()).toEqual(['System']);
     fireEvent.click(screen.getByRole('button', { name: /Dark/ }));
     expect(pressed()).toEqual(['Dark']);
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     fireEvent.click(screen.getByRole('button', { name: /Light/ }));
     expect(pressed()).toEqual(['Light']);
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    fireEvent.click(screen.getByRole('button', { name: /System/ }));
-    expect(pressed()).toEqual(['System']);
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
   });
   it('remembers the choice on the next visit', () => {
     const first = render(<ThemeToggle />);
     fireEvent.click(screen.getByRole('button', { name: /Dark/ }));
     first.unmount();
     render(<ThemeToggle />);
-    expect(screen.getAllByRole('button').filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent)).toEqual(['Dark']);
-  });
-  it('is a labelled group of three buttons that can be used from the keyboard', () => {
-    render(<ThemeToggle />);
-    expect(screen.getByRole('group', { name: 'Colour theme' })).toBeTruthy();
-    expect(screen.getAllByRole('button')).toHaveLength(3);
+    expect(pressed()).toEqual(['Dark']);
   });
 });

@@ -117,7 +117,7 @@ Tests: `tests/messy.test.tsx` builds a deliberately messy .xlsx and asserts the 
 
 ## Light and dark mode, new colours
 
-**Theme switch.** A Light / Dark / System control in the header (icons only on a phone). Light and Dark are explicit choices; System follows the device and updates with it. The choice is saved in the browser and applied before the page first paints, so there is no flash of the wrong theme. If browser storage is blocked (some private windows) the choice still applies for that visit and nothing breaks. The browser's address-bar colour also follows the theme.
+**Theme switch.** A Light / Dark control in the header (icons only on a phone). A first-time visitor starts on whichever matches their device, and there is no third "System" button. The choice is saved in the browser and applied before the page first paints, so there is no flash of the wrong theme. If browser storage is blocked (some private windows) the choice still applies for that visit and nothing breaks. The browser's address-bar colour also follows the theme.
 
 **New palette.** A cooler off-white page with white cards and soft depth in light mode; a deep navy page with raised dark cards in dark mode. The primary colour is a clear blue (a lighter periwinkle in dark mode) instead of the previous dull navy, with hover and pressed states, and a small logo mark next to the title. Status colours (red, amber, green) are kept distinct and readable in both themes. Every text and background pair is at least WCAG AA (4.5:1); `tests/theme.test.tsx` reads the real stylesheet and checks all of them, checks the two dark blocks cannot drift apart, and tests the switch (including blocked storage and the no-flash script).
 
