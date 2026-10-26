@@ -351,6 +351,8 @@ tr.pick td { background: rgba(246, 199, 68, 0.08); }
 .verdict-amber .verdict-label { color: var(--amber); }
 .verdict-green .verdict-label { color: var(--green); }
 .verdict-sub { font-size: 13px; color: var(--ink-2); }
+.verdict-actions { margin-left: auto; }
+.pdfbtn { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .verdict-red { border-left: 3px solid var(--red); }
 .verdict-amber { border-left: 3px solid var(--amber); }
 .verdict-green { border-left: 3px solid var(--green); }

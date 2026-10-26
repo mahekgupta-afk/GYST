@@ -150,6 +150,10 @@ Offered fixes: R-02 set declared value to the items' total; R-03 three choices (
 
 Proved by: `tests/autofix.test.ts` (every fix makes its rule pass, previews equal the real result across all sample bookings, previews never change the booking, no auto-fix for R-01 and R-09, invalid values refused) and `tests/autofix-ui.test.tsx` (preview, cancel, apply and log in the app).
 
+## Check report (PDF)
+
+"Download check report (PDF)" in the verdict bar of every booking, and next to the downloads of an upload (one report for the whole file: a summary page, then a section per booking). `lib/reportData.ts` assembles the data from what the engine already decided (status with red and amber counts; all ten rules with Pass / Amber / Red, what is wrong and how to fix it; other input problems; HS verification results when there are any; the carrier recommendation with priority, reason and the three-carrier comparison; the fixes applied, before and after). `lib/pdf/report.ts` and `lib/pdf/layout.ts` draw it with jsPDF in the browser, loaded only when the button is clicked. Header with the GYST name, generation time, seller and reference; footer "Checks run using GYST's fixed rulebook. Guidance only, not legal or customs advice." and page numbers on every page. Nothing is sent anywhere. Proved by: `tests/report.test.ts` (data matches the engine's result for the rules, the PDF text contains the header, rules, carriers, fixes and the footer on every page, long reports flow onto more pages) and `tests/report-ui.test.tsx` (the buttons, file names and the friendly error).
+
 ## Not changed, and why
 - **Short HS codes** ("6912") are still stored and reported by R-01, as before. The new rule only refuses values that are not codes at all (zeros, negatives, letters).
 - **Blank number cells** remain "missing data" messages (already Red) and are not turned into input errors.

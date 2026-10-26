@@ -9,6 +9,20 @@ export const plural = (n: number, w: string, p?: string) => n + ' ' + (n === 1 ?
 export type Opts = { fix: (s: Spec) => ApplyResult | void; book: () => void; reset: () => void; booking: boolean; ack: (keys: string[]) => void; example?: boolean };
 
 /* ---------- shared pieces ---------- */
+/** A button that builds a PDF in the browser. The PDF code is only loaded when it is clicked; a failure shows a friendly message. */
+export function PdfButton({ label, run, small = true }: { label: string; run: () => Promise<void>; small?: boolean }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'error'>('idle');
+  return (
+    <span className="pdfbtn">
+      <button type="button" className={'btn ghost' + (small ? ' small' : '')} disabled={state === 'busy'}
+        onClick={async () => { setState('busy'); try { await run(); setState('idle'); } catch { setState('error'); } }}>
+        {state === 'busy' ? 'Preparing PDF…' : label}
+      </button>
+      {state === 'error' ? <span className="fixerr" role="alert">The PDF could not be created. Please try again.</span> : null}
+    </span>
+  );
+}
+
 function RuleStrip({ ev }: { ev: any }) {
   const t: Record<string, string> = { pass: 'Pass', red: 'Fail', amber: 'Warn', na: 'n/a' };
   return (
@@ -38,6 +52,7 @@ function Verdict({ b, ev }: { b: any; ev: any; thumpKey?: number }) {
         <span className="verdict-dot" aria-hidden="true" />
         <span className="verdict-label">{cfg.label}</span>
         <span className="verdict-sub">{cfg.sub}</span>
+        <span className="verdict-actions"><PdfButton label="Download check report (PDF)" run={async () => { const m = await import('@/lib/pdf/report'); m.downloadBookingReport(b, ev); }} /></span>
       </div>
       <p className="sub">{idLabel(b) + ' for ' + (b.seller || 'unnamed seller') + ' · ' + (b.originCity || '?') + ' → ' + (b.destCity || b.destCountry || '?')}</p>
       <RuleStrip ev={ev} />
@@ -411,6 +426,7 @@ export function UploadResults({ upload, sel, setSel, filter, setFilter, thumpKey
         </button>
         <button className="btn small ghost" onClick={h.download}>{anyChanges ? 'Download corrected file (.xlsx)' : 'Download results (.xlsx)'}</button>
         <button className="btn small ghost" onClick={() => exportCSV(upload.bookings)}>Download issue list (CSV)</button>
+        <PdfButton label="Download check report (PDF)" run={async () => { const m = await import('@/lib/pdf/report'); m.downloadFileReport(upload.fileName || 'bookings', upload.bookings); }} />
       </div>
       <p className="note" style={{ marginTop: -6 }}>Bookings with warnings only are booked one at a time, so you can read the warnings first.</p>
       {(upload.warnings || []).map((w: string, i: number) => <div key={i} className="warnbox">{w}</div>)}
